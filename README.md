@@ -1,4 +1,4 @@
-![WIP](https://img.shields.io/badge/status-WIP-orange)
+![WIP](https://img.shields.io/badge/CLIPS-V6.4.1-blue) ![WIP](https://img.shields.io/badge/status-WIP-orange)
 
 # CLIPS-ArduinoNanoESP32
 Porting of [CLIPS](https://sourceforge.net/projects/clipsrules/) to [Arduino Nano ESP32](https://docs.arduino.cc/hardware/nano-esp32/)
