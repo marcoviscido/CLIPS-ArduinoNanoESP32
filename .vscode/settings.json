@@ -1,0 +1,18 @@
+{
+    "idf.portWin": "COM5",
+    "idf.openOcdConfigs": [
+        "board/esp32s3-builtin.cfg"
+    ],
+    "idf.flashType": "JTAG",
+    "files.associations": {
+        "esp_psram.h": "c",
+        "array": "cpp",
+        "string": "cpp",
+        "string_view": "cpp",
+        "span": "cpp",
+        "condition_variable": "cpp",
+        "future": "cpp",
+        "sstream": "cpp",
+        "regex": "cpp"
+    }
+}

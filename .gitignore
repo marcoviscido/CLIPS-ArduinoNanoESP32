@@ -1,0 +1,9 @@
+managed_components/
+
+include/config
+include/sdkconfig.h
+build/
+dependencies.lock
+.DS_Store
+
+*.pyc
