@@ -1,3 +1,44 @@
+/**
+ * CLIPS-ArduinoNanoESP32... a porting of CLIPS to Arduino Nano ESP32.
+ * 
+ * The CLIPS Reference Manual states:
+ *  "CLIPS programs may be executed in three ways: interactively using a simple
+ *   Read-Eval-Print Loop (REPL) interface; interactively using an Integrated
+ *   Development Environment (IDE) interface; or as embedded application in
+ *   which the user provides a main program and controls execution of the expert
+ *   system through the CLIPS Application Programming Interface (API)."
+ * 
+ * This project also consists of mapping the Read-Eval-Print Loop with the
+ * standard loop operation of Arduino and integrating "facts" with states/levels
+ * of its pins... and much more. This enables endless application possibilities in
+ * the field of IoT and automation, as well as benefits such as code portability.
+ * COOL coding!
+ * 
+ *********************************************************************************
+ * 
+ * MIT License
+ * 
+ * Copyright (c) 2025 Marco Viscido
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 #include <Arduino.h>
 
 #include "esp32s3/rom/rtc.h"
