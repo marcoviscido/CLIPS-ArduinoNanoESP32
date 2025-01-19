@@ -18,4 +18,6 @@ list(APPEND compile_definitions "ARDUINO_USB_DFU_ON_BOOT=1")
 list(APPEND compile_definitions "ARDUINO_RUNNING_CORE=1")
 list(APPEND compile_definitions "ARDUINO_EVENT_RUNNING_CORE=1")
 
+include_directories(${COMPONENT_LIB} PUBLIC "${CMAKE_CURRENT_LIST_DIR}/main/arduino_nano_nora")
+
 project(main)

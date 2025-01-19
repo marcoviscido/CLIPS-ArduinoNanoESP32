@@ -39,8 +39,6 @@
  * SOFTWARE.
  */
 
-#include <arduino_nano_nora/pins_arduino.h>
-
 #include <Arduino.h>
 
 // #include "esp32s3/rom/rtc.h"
@@ -49,7 +47,14 @@
 #include "clips.h"
 
 bool stringComplete = false;
+bool systemReady = false;
 static Environment *mainEnv;
+
+// variables to keep track of the timing of recent interrupts
+unsigned long button_time = 0;
+unsigned long last_button_time = 0;
+
+Fact *pinStateD2 = nullptr;
 
 static bool QueryTraceCallback(
     Environment *environment,
@@ -87,16 +92,96 @@ static void WriteTraceCallback(
   }
 }
 
+void ARDUINO_ISR_ATTR isr()
+{
+  if (!systemReady)
+  {
+    return;
+  }
+
+  button_time = millis();
+  if (button_time - last_button_time > 500)
+  {
+    if (!digitalRead(D2))
+    {
+      if (pinStateD2 != nullptr)
+      {
+        Retract(pinStateD2);
+        ReleaseFact(pinStateD2);
+      }
+      pinStateD2 = AssertString(mainEnv, "(PIN-D2 INPUT HIGH)");
+    }
+    else
+    {
+      if (pinStateD2 != nullptr)
+      {
+        Retract(pinStateD2);
+        ReleaseFact(pinStateD2);
+      }
+
+      pinStateD2 = AssertString(mainEnv, "(PIN-D2 INPUT LOW)");
+    }
+    last_button_time = button_time;
+  }
+}
+
+void LedOnFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
+{
+  digitalWrite(D5, HIGH);
+  Serial.println("D5 high");
+}
+
+void LedOffFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
+{
+  digitalWrite(D5, LOW);
+  Serial.println("D5 low");
+}
+
+void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
+{
+  UDFValue nextPossible;
+  const char *arg1;
+  const char *arg2;
+
+  if (!UDFNthArgument(context, 1, LEXEME_BITS, &nextPossible))
+  {
+    return;
+  }
+  else
+  {
+    arg1 = nextPossible.lexemeValue->contents;
+  }
+
+  if (!UDFNthArgument(context, 2, LEXEME_BITS, &nextPossible))
+  {
+    return;
+  }
+  else
+  {
+    arg2 = nextPossible.lexemeValue->contents;
+  }
+
+  Serial.print(arg1);
+  Serial.print("  ");
+  Serial.print(arg2);
+}
+
 void setup()
 {
   pinMode(LED_RED, OUTPUT);
   pinMode(LED_GREEN, OUTPUT);
   pinMode(LED_BLUE, OUTPUT);
   pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_RED, HIGH);
-  digitalWrite(LED_GREEN, HIGH);
-  digitalWrite(LED_BLUE, HIGH);
-  digitalWrite(LED_BUILTIN, LOW); // reverse logic
+  digitalWrite(LED_RED, HIGH);   // reverse logic
+  digitalWrite(LED_GREEN, HIGH); // reverse logic
+  digitalWrite(LED_BLUE, HIGH);  // reverse logic
+  digitalWrite(LED_BUILTIN, LOW);
+
+  pinMode(D2, INPUT_PULLUP);
+  attachInterrupt(D2, isr, CHANGE);
+
+  pinMode(D5, OUTPUT);
+  digitalWrite(D5, HIGH);
 
   Serial.begin(11520);
   Serial.setTimeout(2000);
@@ -155,12 +240,28 @@ void setup()
   RouterData(mainEnv)->InputUngets = 0;
   RouterData(mainEnv)->AwaitingInput = true;
 
-  Watch(mainEnv, ALL); // debug
-  Build(mainEnv, "(defrule hello"
-                 "  =>"
-                 "  (println \"Arduino Nano ESP32 + CLIPS ready!\"))");
+  AddUDF(mainEnv, "pin-mode", "v", 2, 2, "y", PinModeFunction, "PinModeFunction", NULL);
+  AddUDF(mainEnv, "led-on", "v", 0, 0, NULL, LedOnFunction, "LedOnFunction", NULL);
+  AddUDF(mainEnv, "led-off", "v", 0, 0, NULL, LedOffFunction, "LedOffFunction", NULL);
 
+  Watch(mainEnv, ALL); // debug
+  // Build(mainEnv, "(defrule hello"
+  //                "  =>"
+  //                "  (println \"Hello World!\"))");
+
+  Build(mainEnv, "(defrule led-off-se-scollegato"
+                 "  (PIN-D2 INPUT LOW)"
+                 "  =>"
+                 "  (led-off))");
+
+  Build(mainEnv, "(defrule led-on-se-collegato"
+                 "  (PIN-D2 INPUT HIGH)"
+                 "  =>"
+                 "  (led-on))");
+
+  Writeln(mainEnv, "Arduino Nano ESP32 + CLIPS ready!");
   PrintPrompt(mainEnv);
+  systemReady = true;
 }
 
 void loop()
@@ -201,7 +302,7 @@ void loop()
     // Serial.println("");
   }
 
-  delay(100); // debug
+  delay(100);                     // debug
   digitalWrite(LED_BUILTIN, LOW); // debug
   delay(400);
 }
