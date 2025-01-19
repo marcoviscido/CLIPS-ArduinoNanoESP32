@@ -12,7 +12,6 @@ list(APPEND compile_definitions "ARDUINO_USB_MODE=1")
 list(APPEND compile_definitions "BOARD_HAS_PSRAM")
 
 list(APPEND compile_definitions "ARDUINO_NANO_ESP32")
-# list(APPEND compile_definitions "BOARD_HAS_PIN_REMAP")
 # list(APPEND compile_definitions "USB_MANUFACTURER=\\\"Arduino\\\"")
 # list(APPEND compile_definitions "USB_PRODUCT=\\\"NanoESP32\\\"")
 list(APPEND compile_definitions "ARDUINO_USB_DFU_ON_BOOT=1")
