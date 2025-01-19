@@ -39,12 +39,9 @@
  * SOFTWARE.
  */
 
-#include <Arduino.h>
-
-// #include "esp32s3/rom/rtc.h"
-// #include "esp_task_wdt.h"
-// #include "esp_mac.h"
+#include "Arduino.h"
 #include "clips.h"
+#include "clips_gpio.h"
 
 bool stringComplete = false;
 bool systemReady = false;
@@ -125,46 +122,46 @@ void ARDUINO_ISR_ATTR isr()
   }
 }
 
-void LedOnFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
-{
-  digitalWrite(D5, HIGH);
-  Serial.println("D5 high");
-}
+// void LedOnFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
+// {
+//   digitalWrite(D5, HIGH);
+//   Serial.println("D5 high");
+// }
 
-void LedOffFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
-{
-  digitalWrite(D5, LOW);
-  Serial.println("D5 low");
-}
+// void LedOffFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
+// {
+//   digitalWrite(D5, LOW);
+//   Serial.println("D5 low");
+// }
 
-void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
-{
-  UDFValue nextPossible;
-  const char *arg1;
-  const char *arg2;
+// void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
+// {
+//   UDFValue nextPossible;
+//   const char *arg1;
+//   const char *arg2;
 
-  if (!UDFNthArgument(context, 1, LEXEME_BITS, &nextPossible))
-  {
-    return;
-  }
-  else
-  {
-    arg1 = nextPossible.lexemeValue->contents;
-  }
+//   if (!UDFNthArgument(context, 1, LEXEME_BITS, &nextPossible))
+//   {
+//     return;
+//   }
+//   else
+//   {
+//     arg1 = nextPossible.lexemeValue->contents;
+//   }
 
-  if (!UDFNthArgument(context, 2, LEXEME_BITS, &nextPossible))
-  {
-    return;
-  }
-  else
-  {
-    arg2 = nextPossible.lexemeValue->contents;
-  }
+//   if (!UDFNthArgument(context, 2, LEXEME_BITS, &nextPossible))
+//   {
+//     return;
+//   }
+//   else
+//   {
+//     arg2 = nextPossible.lexemeValue->contents;
+//   }
 
-  Serial.print(arg1);
-  Serial.print("  ");
-  Serial.print(arg2);
-}
+//   Serial.print(arg1);
+//   Serial.print("  ");
+//   Serial.print(arg2);
+// }
 
 void setup()
 {
