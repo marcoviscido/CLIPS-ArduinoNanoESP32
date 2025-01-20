@@ -1,4 +1,4 @@
- /*
+/*
  * MIT License
  *
  * Copyright (c) 2025 Marco Viscido
@@ -22,16 +22,29 @@
  * SOFTWARE.
  */
 
-#ifndef _H_CLIPS_GPIO_H
+#ifndef _H_CLIPS_DIGITAL_IO_H
 
 #pragma once
 
-#define _H_CLIPS_GPIO_H
+#define _H_CLIPS_DIGITAL_IO_H
 
-#include "pins_arduino.h"
+struct KeyValue
+{
+    const char *key;
+    int value;
+};
 
-void LedOnFunction(Environment *, UDFContext *, UDFValue *);
-void LedOffFunction(Environment *, UDFContext *, UDFValue *);
+/**
+ * Inverse ESP32-style pin definitions (when API uses GPIOx)
+ */
+static KeyValue pinsLookupTable[] = {
+    {"D5", 8},
+    {"D2", 5},
+};
+static const int pinsLookupTableSize = sizeof(pinsLookupTable) / sizeof(pinsLookupTable[0]);
+
+void DigitalReadFunction(Environment *, UDFContext *, UDFValue *);
+void DigitalWriteFunction(Environment *, UDFContext *, UDFValue *);
 void PinModeFunction(Environment *, UDFContext *, UDFValue *);
 
 #endif

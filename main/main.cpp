@@ -41,10 +41,12 @@
 
 #include "Arduino.h"
 #include "clips.h"
-#include "clips_gpio.h"
+#include "clips_digital_io.h"
 
 bool stringComplete = false;
 bool systemReady = false;
+bool runInLoop = false;
+unsigned long runInLoopDelay = 10000;
 static Environment *mainEnv;
 
 // variables to keep track of the timing of recent interrupts
@@ -89,79 +91,74 @@ static void WriteTraceCallback(
   }
 }
 
-void ARDUINO_ISR_ATTR isr()
+// void ARDUINO_ISR_ATTR isr()
+// {
+//   if (!systemReady)
+//   {
+//     return;
+//   }
+
+//   button_time = millis();
+//   if (button_time - last_button_time > 500)
+//   {
+//     if (!digitalRead(D2))
+//     {
+//       if (pinStateD2 != nullptr)
+//       {
+//         Retract(pinStateD2);
+//         ReleaseFact(pinStateD2);
+//       }
+//       pinStateD2 = AssertString(mainEnv, "(PIN-D2 INPUT HIGH)");
+//     }
+//     else
+//     {
+//       if (pinStateD2 != nullptr)
+//       {
+//         Retract(pinStateD2);
+//         ReleaseFact(pinStateD2);
+//       }
+
+//       pinStateD2 = AssertString(mainEnv, "(PIN-D2 INPUT LOW)");
+//     }
+//     last_button_time = button_time;
+//   }
+// }
+
+void GetRunInLoopFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
 {
-  if (!systemReady)
+  returnValue->lexemeValue = CreateBoolean(mainEnv, runInLoop);
+}
+
+void SetRunInLoopFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
+{
+  UDFValue theArg;
+  const char *argValue;
+
+  if (!UDFFirstArgument(context, LEXEME_BITS, &theArg))
   {
     return;
   }
 
-  button_time = millis();
-  if (button_time - last_button_time > 500)
+  argValue = theArg.lexemeValue->contents;
+  if (argValue == nullptr)
   {
-    if (!digitalRead(D2))
-    {
-      if (pinStateD2 != nullptr)
-      {
-        Retract(pinStateD2);
-        ReleaseFact(pinStateD2);
-      }
-      pinStateD2 = AssertString(mainEnv, "(PIN-D2 INPUT HIGH)");
-    }
-    else
-    {
-      if (pinStateD2 != nullptr)
-      {
-        Retract(pinStateD2);
-        ReleaseFact(pinStateD2);
-      }
+    UDFThrowError(context);
+    return;
+  }
 
-      pinStateD2 = AssertString(mainEnv, "(PIN-D2 INPUT LOW)");
-    }
-    last_button_time = button_time;
+  if (argValue != nullptr && strcmp(argValue, "FALSE") == 0)
+  {
+    runInLoop = false;
+  }
+  else if (argValue != nullptr && strcmp(argValue, "TRUE") == 0)
+  {
+    runInLoop = true;
+  }
+  else
+  {
+    UDFThrowError(context);
   }
 }
-
-// void LedOnFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
-// {
-//   digitalWrite(D5, HIGH);
-//   Serial.println("D5 high");
-// }
-
-// void LedOffFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
-// {
-//   digitalWrite(D5, LOW);
-//   Serial.println("D5 low");
-// }
-
-// void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
-// {
-//   UDFValue nextPossible;
-//   const char *arg1;
-//   const char *arg2;
-
-//   if (!UDFNthArgument(context, 1, LEXEME_BITS, &nextPossible))
-//   {
-//     return;
-//   }
-//   else
-//   {
-//     arg1 = nextPossible.lexemeValue->contents;
-//   }
-
-//   if (!UDFNthArgument(context, 2, LEXEME_BITS, &nextPossible))
-//   {
-//     return;
-//   }
-//   else
-//   {
-//     arg2 = nextPossible.lexemeValue->contents;
-//   }
-
-//   Serial.print(arg1);
-//   Serial.print("  ");
-//   Serial.print(arg2);
-// }
 
 void setup()
 {
@@ -173,12 +170,6 @@ void setup()
   digitalWrite(LED_GREEN, HIGH); // reverse logic
   digitalWrite(LED_BLUE, HIGH);  // reverse logic
   digitalWrite(LED_BUILTIN, LOW);
-
-  pinMode(D2, INPUT_PULLUP);
-  attachInterrupt(D2, isr, CHANGE);
-
-  pinMode(D5, OUTPUT);
-  digitalWrite(D5, HIGH);
 
   Serial.begin(11520);
   Serial.setTimeout(2000);
@@ -237,24 +228,17 @@ void setup()
   RouterData(mainEnv)->InputUngets = 0;
   RouterData(mainEnv)->AwaitingInput = true;
 
-  AddUDF(mainEnv, "pin-mode", "v", 2, 2, "y", PinModeFunction, "PinModeFunction", NULL);
-  AddUDF(mainEnv, "led-on", "v", 0, 0, NULL, LedOnFunction, "LedOnFunction", NULL);
-  AddUDF(mainEnv, "led-off", "v", 0, 0, NULL, LedOffFunction, "LedOffFunction", NULL);
+  AddUDF(mainEnv, "get-run-in-loop", "b", 0, 0, "v", GetRunInLoopFunction, "GetRunInLoopFunction", NULL);
+  AddUDF(mainEnv, "set-run-in-loop", "v", 1, 1, ";y", SetRunInLoopFunction, "SetRunInLoopFunction", NULL);
+  // digital_io
+  AddUDF(mainEnv, "digital-read", "y", 1, 1, ";y", DigitalReadFunction, "DigitalReadFunction", NULL);
+  AddUDF(mainEnv, "digital-write", "v", 2, 2, ";y;y", DigitalWriteFunction, "DigitalWriteFunction", NULL);
+  AddUDF(mainEnv, "pin-mode", "v", 2, 2, ";y;y", PinModeFunction, "PinModeFunction", NULL);
 
-  Watch(mainEnv, ALL); // debug
+  // Watch(mainEnv, ALL); // debug
   // Build(mainEnv, "(defrule hello"
   //                "  =>"
   //                "  (println \"Hello World!\"))");
-
-  Build(mainEnv, "(defrule led-off-se-scollegato"
-                 "  (PIN-D2 INPUT LOW)"
-                 "  =>"
-                 "  (led-off))");
-
-  Build(mainEnv, "(defrule led-on-se-collegato"
-                 "  (PIN-D2 INPUT HIGH)"
-                 "  =>"
-                 "  (led-on))");
 
   Writeln(mainEnv, "Arduino Nano ESP32 + CLIPS ready!");
   PrintPrompt(mainEnv);
@@ -293,6 +277,11 @@ void loop()
      * -1 is returned if the command contains an error.
      */
     bool exec = ExecuteIfCommandComplete(mainEnv);
+    if (runInLoop && exec)
+    {
+      delay(runInLoopDelay);
+      Run(mainEnv, -1LL);
+    }
     // // debug
     // Serial.print(F("debug: exec "));
     // Serial.print(exec);
