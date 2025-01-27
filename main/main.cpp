@@ -44,16 +44,9 @@
 #include "clips_digital_io.h"
 
 bool stringComplete = false;
+bool stringInEdit = false;
 bool systemReady = false;
-bool runInLoop = false;
-unsigned long runInLoopDelay = 10000;
 static Environment *mainEnv;
-
-// variables to keep track of the timing of recent interrupts
-unsigned long button_time = 0;
-unsigned long last_button_time = 0;
-
-Fact *pinStateD2 = nullptr;
 
 static bool QueryTraceCallback(
     Environment *environment,
@@ -91,75 +84,6 @@ static void WriteTraceCallback(
   }
 }
 
-// void ARDUINO_ISR_ATTR isr()
-// {
-//   if (!systemReady)
-//   {
-//     return;
-//   }
-
-//   button_time = millis();
-//   if (button_time - last_button_time > 500)
-//   {
-//     if (!digitalRead(D2))
-//     {
-//       if (pinStateD2 != nullptr)
-//       {
-//         Retract(pinStateD2);
-//         ReleaseFact(pinStateD2);
-//       }
-//       pinStateD2 = AssertString(mainEnv, "(PIN-D2 INPUT HIGH)");
-//     }
-//     else
-//     {
-//       if (pinStateD2 != nullptr)
-//       {
-//         Retract(pinStateD2);
-//         ReleaseFact(pinStateD2);
-//       }
-
-//       pinStateD2 = AssertString(mainEnv, "(PIN-D2 INPUT LOW)");
-//     }
-//     last_button_time = button_time;
-//   }
-// }
-
-void GetRunInLoopFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
-{
-  returnValue->lexemeValue = CreateBoolean(mainEnv, runInLoop);
-}
-
-void SetRunInLoopFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
-{
-  UDFValue theArg;
-  const char *argValue;
-
-  if (!UDFFirstArgument(context, LEXEME_BITS, &theArg))
-  {
-    return;
-  }
-
-  argValue = theArg.lexemeValue->contents;
-  if (argValue == nullptr)
-  {
-    UDFThrowError(context);
-    return;
-  }
-
-  if (argValue != nullptr && strcmp(argValue, "FALSE") == 0)
-  {
-    runInLoop = false;
-  }
-  else if (argValue != nullptr && strcmp(argValue, "TRUE") == 0)
-  {
-    runInLoop = true;
-  }
-  else
-  {
-    UDFThrowError(context);
-  }
-}
-
 void setup()
 {
   pinMode(LED_RED, OUTPUT);
@@ -183,11 +107,12 @@ void setup()
   if (!psramFound())
   {
     Serial.println(F("PSRAM not available!"));
-    digitalWrite(LED_RED, HIGH);
+    digitalWrite(LED_RED, LOW); // reverse logic
     delay(2000);
     return;
   }
 
+  // TODO: wdt disabled!!!
   // rtc_wdt_protect_off();
   // rtc_wdt_disable();
   // esp_task_wdt_delete(NULL);
@@ -228,17 +153,15 @@ void setup()
   RouterData(mainEnv)->InputUngets = 0;
   RouterData(mainEnv)->AwaitingInput = true;
 
-  AddUDF(mainEnv, "get-run-in-loop", "b", 0, 0, "v", GetRunInLoopFunction, "GetRunInLoopFunction", NULL);
-  AddUDF(mainEnv, "set-run-in-loop", "v", 1, 1, ";y", SetRunInLoopFunction, "SetRunInLoopFunction", NULL);
-  // digital_io
+  Build(mainEnv, "(defclass PIN \"A generic Arduino GPIO pin.\" (is-a USER) (role concrete) (pattern-match reactive)"
+                 "   (slot value (type SYMBOL NUMBER))"
+                 "   (slot mode (type SYMBOL)(default nil)(allowed-symbols nil INPUT OUTPUT))"
+                 ")");
+
+  // adding digital_io wrapper functions
   AddUDF(mainEnv, "digital-read", "y", 1, 1, ";y", DigitalReadFunction, "DigitalReadFunction", NULL);
   AddUDF(mainEnv, "digital-write", "v", 2, 2, ";y;y", DigitalWriteFunction, "DigitalWriteFunction", NULL);
-  AddUDF(mainEnv, "pin-mode", "v", 2, 2, ";y;y", PinModeFunction, "PinModeFunction", NULL);
-
-  // Watch(mainEnv, ALL); // debug
-  // Build(mainEnv, "(defrule hello"
-  //                "  =>"
-  //                "  (println \"Hello World!\"))");
+  AddUDF(mainEnv, "pin-mode", "i", 2, 2, ";y;y", PinModeFunction, "PinModeFunction", NULL);
 
   Writeln(mainEnv, "Arduino Nano ESP32 + CLIPS ready!");
   PrintPrompt(mainEnv);
@@ -248,44 +171,36 @@ void setup()
 void loop()
 {
   digitalWrite(LED_BUILTIN, HIGH);
+
+  if (!stringInEdit)
+  {
+    CallPeriodicTasks(mainEnv);
+  }
+
   while (Serial.available())
   {
+    stringInEdit = true;
     char inChar = (char)Serial.read();
     AppendNCommandString(mainEnv, &inChar, 1);
 
     if (inChar == '\r')
     {
       stringComplete = true;
-      // Serial.print(F("debug: stringComplete true")); // debug
     }
-
-    // // debug
-    // Serial.print(F("debug: "));
-    // Serial.println(GetCommandString(mainEnv));
-    // Serial.println("");
   }
 
   if (stringComplete)
   {
-    Serial.println(GetCommandString(mainEnv));
+    Serial.println(GetCommandString(mainEnv)); // debug
     stringComplete = false;
-    // Serial.print(F("debug: stringComplete false")); // debug
+    stringInEdit = false;
 
     /*
-     * If a complete command exists, then 1 is returned.
-     * 0 is returned if the command was not complete and without errors.
-     * -1 is returned if the command contains an error.
+     * True if a complete command exists, then 1 is returned.
+     * False is returned if the command was not complete and without errors or
+     * if the command contains an error.
      */
-    bool exec = ExecuteIfCommandComplete(mainEnv);
-    if (runInLoop && exec)
-    {
-      delay(runInLoopDelay);
-      Run(mainEnv, -1LL);
-    }
-    // // debug
-    // Serial.print(F("debug: exec "));
-    // Serial.print(exec);
-    // Serial.println("");
+    ExecuteIfCommandComplete(mainEnv);
   }
 
   delay(100);                     // debug

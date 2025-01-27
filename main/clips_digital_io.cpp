@@ -39,6 +39,38 @@ int getPinFromName(const char *key)
   return -1;
 }
 
+bool pinInstanceExists(Environment *theEnv, const char *pinName)
+{
+  UDFValue iterate;
+  Instance *theInstance;
+  Defclass *theClass;
+
+  if (pinName == NULL || pinName == nullptr)
+  {
+    return false;
+  }
+
+  theClass = FindDefclass(theEnv, "PIN");
+  for (theInstance = GetNextInstanceInClassAndSubclasses(&theClass, NULL, &iterate);
+       theInstance != NULL;
+       theInstance = GetNextInstanceInClassAndSubclasses(&theClass,
+                                                         theInstance, &iterate))
+  {
+    if (strcmp(InstanceName(theInstance), pinName) == 0)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+Instance *getInstanceByName(Environment *theEnv, const char *pinName)
+{
+  Instance *c3 = nullptr;
+  c3 = FindInstance(theEnv, NULL, pinName, true);
+  return c3;
+}
+
 void DigitalReadFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
 {
   UDFValue theArg;
@@ -59,13 +91,19 @@ void DigitalReadFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
   int pin = getPinFromName(pinArg);
   if (pin < 0)
   {
+    Writeln(theEnv, "Pin index cannot be negative.");
     UDFThrowError(context);
+    return;
   }
 
-  // todo: check if registered
-  // uint8_t bit = digitalPinToBitMask(pin);
-  // uint8_t port = digitalPinToPort(pin);
-  // volatile uint32_t *reg = portModeRegister(port);
+  // (any-instancep ((?pin PIN)) (= (str-compare ?pin:id "D2") 0))
+  if (!pinInstanceExists(theEnv, pinArg))
+  {
+    Write(theEnv, pinArg);
+    Writeln(theEnv, " pin has not yet been registered.");
+    UDFThrowError(context);
+    return;
+  }
 
   if (digitalRead(pin) == 0)
   {
@@ -108,8 +146,21 @@ void DigitalWriteFunction(Environment *theEnv, UDFContext *context, UDFValue *re
   int pin = getPinFromName(pinArg);
   if (pin < 0)
   {
+    Writeln(theEnv, "Pin index cannot be negative.");
     UDFThrowError(context);
+    return;
   }
+
+  // (any-instancep ((?pin PIN)) (= (str-compare ?pin:id "D2") 0))
+  if (!pinInstanceExists(theEnv, pinArg))
+  {
+    Write(theEnv, pinArg);
+    Writeln(theEnv, " pin has not yet been registered.");
+    UDFThrowError(context);
+    return;
+  }
+
+  // send [instance] get-mode == INPUT / OUTPUT?
 
   if (stateArg != nullptr && strcmp(stateArg, "LOW") == 0)
   {
@@ -125,6 +176,9 @@ void DigitalWriteFunction(Environment *theEnv, UDFContext *context, UDFValue *re
   }
 }
 
+/**
+ * Ex.: (pin-mode D5 OUTPUT)
+ */
 void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
 {
   UDFValue nextPossible;
@@ -158,53 +212,79 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
   int pin = getPinFromName(pinArg);
   if (pin < 0)
   {
+    Writeln(theEnv, "Pin index cannot be negative.");
     UDFThrowError(context);
+    return;
   }
+
+  String makeInstCmd = "(";
+  makeInstCmd += pinArg;
+  makeInstCmd += " of PIN ";
+  makeInstCmd += "(mode \"";
 
   if (modeArg != nullptr && strcmp(modeArg, "INPUT") == 0)
   {
     pinMode(pin, INPUT);
-    // AssertString(theEnv, strcat(strcat("(", pinArg), ")"));
+    makeInstCmd += "INPUT";
+    makeInstCmd += "\"))";
+    returnValue->instanceValue = MakeInstance(theEnv, makeInstCmd.c_str());
   }
   else if (modeArg != nullptr && strcmp(modeArg, "OUTPUT") == 0)
   {
     pinMode(pin, OUTPUT);
-    // AssertString(theEnv, strcat(strcat("(", pinArg), ")"));
+    makeInstCmd += "OUTPUT";
+    makeInstCmd += "\"))";
+    returnValue->instanceValue = MakeInstance(theEnv, makeInstCmd.c_str());
   }
   else if (modeArg != nullptr && strcmp(modeArg, "PULLUP") == 0)
   {
     pinMode(pin, PULLUP);
-    // AssertString(theEnv, strcat(strcat("(", pinArg), ")"));
+    makeInstCmd += "OUTPUT";
+    makeInstCmd += "\"))";
+    returnValue->instanceValue = MakeInstance(theEnv, makeInstCmd.c_str());
   }
   else if (modeArg != nullptr && strcmp(modeArg, "INPUT_PULLUP") == 0)
   {
     pinMode(pin, INPUT_PULLUP);
-    // AssertString(theEnv, strcat(strcat("(", pinArg), ")"));
+    makeInstCmd += "INPUT";
+    makeInstCmd += "\"))";
+    returnValue->instanceValue = MakeInstance(theEnv, makeInstCmd.c_str());
   }
   else if (modeArg != nullptr && strcmp(modeArg, "PULLDOWN") == 0)
   {
     pinMode(pin, PULLDOWN);
-    // AssertString(theEnv, strcat(strcat("(", pinArg), ")"));
+    makeInstCmd += "OUTPUT";
+    makeInstCmd += "\"))";
+    returnValue->instanceValue = MakeInstance(theEnv, makeInstCmd.c_str());
   }
   else if (modeArg != nullptr && strcmp(modeArg, "INPUT_PULLDOWN") == 0)
   {
     pinMode(pin, INPUT_PULLDOWN);
-    // AssertString(theEnv, strcat(strcat("(", pinArg), ")"));
+    makeInstCmd += "INPUT";
+    makeInstCmd += "\"))";
+    returnValue->instanceValue = MakeInstance(theEnv, makeInstCmd.c_str());
   }
   else if (modeArg != nullptr && strcmp(modeArg, "OPEN_DRAIN") == 0)
   {
     pinMode(pin, OPEN_DRAIN);
-    // AssertString(theEnv, strcat(strcat("(", pinArg), ")"));
+    makeInstCmd += "INPUT";
+    makeInstCmd += "\"))";
+    returnValue->instanceValue = MakeInstance(theEnv, makeInstCmd.c_str());
   }
   else if (modeArg != nullptr && strcmp(modeArg, "OUTPUT_OPEN_DRAIN") == 0)
   {
     pinMode(pin, OUTPUT_OPEN_DRAIN);
-    // AssertString(theEnv, strcat(strcat("(", pinArg), ")"));
+    makeInstCmd += "OUTPUT";
+    makeInstCmd += "\"))";
+    returnValue->instanceValue = MakeInstance(theEnv, makeInstCmd.c_str());
   }
   else if (modeArg != nullptr && strcmp(modeArg, "ANALOG") == 0)
   {
-    pinMode(pin, ANALOG);
-    // AssertString(theEnv, strcat(strcat("(", pinArg), ")"));
+    // pinMode(pin, ANALOG);
+    // makeInstCmd += modeArg;
+    // makeInstCmd += "\"))";
+    // MakeInstance(theEnv, makeInstCmd.c_str());
+    UDFThrowError(context);
   }
   else
   {
