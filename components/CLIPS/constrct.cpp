@@ -568,6 +568,12 @@ void Reset(
    
    CallPeriodicTasks(theEnv);
 
+   /*======================*/
+   /* Call starting tasks. */
+   /*======================*/
+   
+   CallStartingTasks(theEnv);
+
    /*===================================*/
    /* A reset is no longer in progress. */
    /*===================================*/

@@ -39,38 +39,6 @@ int getPinFromName(const char *key)
   return -1;
 }
 
-bool pinInstanceExists(Environment *theEnv, const char *pinName)
-{
-  UDFValue iterate;
-  Instance *theInstance;
-  Defclass *theClass;
-
-  if (pinName == NULL || pinName == nullptr)
-  {
-    return false;
-  }
-
-  theClass = FindDefclass(theEnv, "PIN");
-  for (theInstance = GetNextInstanceInClassAndSubclasses(&theClass, NULL, &iterate);
-       theInstance != NULL;
-       theInstance = GetNextInstanceInClassAndSubclasses(&theClass,
-                                                         theInstance, &iterate))
-  {
-    if (strcmp(InstanceName(theInstance), pinName) == 0)
-    {
-      return true;
-    }
-  }
-  return false;
-}
-
-Instance *getInstanceByName(Environment *theEnv, const char *pinName)
-{
-  Instance *c3 = nullptr;
-  c3 = FindInstance(theEnv, NULL, pinName, true);
-  return c3;
-}
-
 void DigitalReadFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
 {
   UDFValue theArg;
@@ -91,19 +59,44 @@ void DigitalReadFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
   int pin = getPinFromName(pinArg);
   if (pin < 0)
   {
-    Writeln(theEnv, "Pin index cannot be negative.");
+    Writeln(theEnv, "Pin name is not valid.");
     UDFThrowError(context);
     return;
   }
 
-  // (any-instancep ((?pin PIN)) (= (str-compare ?pin:id "D2") 0))
-  if (!pinInstanceExists(theEnv, pinArg))
+  CLIPSValue *insdata = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
+  insdata->instanceValue = FindInstance(theEnv, NULL, pinArg, true);
+  if (insdata->instanceValue == nullptr)
   {
+    genfree(theEnv, insdata, sizeof(CLIPSValue));
     Write(theEnv, pinArg);
     Writeln(theEnv, " pin has not yet been registered.");
     UDFThrowError(context);
     return;
   }
+
+  CLIPSValue *modeSlotVal = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
+  if (DirectGetSlot(insdata->instanceValue, "mode", modeSlotVal) != GSE_NO_ERROR)
+  {
+    genfree(theEnv, insdata, sizeof(CLIPSValue));
+    genfree(theEnv, modeSlotVal, sizeof(CLIPSValue));
+    // se non riesco a leggere l'attributo mode della classe PIN
+    Writeln(theEnv, "Pin instance is not valid.");
+    UDFThrowError(context);
+    return;
+  }
+
+  if (strcmp(modeSlotVal->lexemeValue->contents, "INPUT") != 0)
+  {
+    genfree(theEnv, modeSlotVal, sizeof(CLIPSValue));
+    genfree(theEnv, insdata, sizeof(CLIPSValue));
+    Write(theEnv, "Pin ");
+    Write(theEnv, pinArg);
+    Writeln(theEnv, " is not in INPUT mode.");
+    UDFThrowError(context);
+    return;
+  }
+  genfree(theEnv, modeSlotVal, sizeof(CLIPSValue));
 
   if (digitalRead(pin) == 0)
   {
@@ -113,6 +106,8 @@ void DigitalReadFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
   {
     returnValue->lexemeValue = CreateSymbol(theEnv, "HIGH");
   }
+  Send(theEnv, insdata, "put-value", returnValue->lexemeValue->contents, NULL);
+  genfree(theEnv, insdata, sizeof(CLIPSValue));
 }
 
 void DigitalWriteFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
@@ -146,32 +141,60 @@ void DigitalWriteFunction(Environment *theEnv, UDFContext *context, UDFValue *re
   int pin = getPinFromName(pinArg);
   if (pin < 0)
   {
-    Writeln(theEnv, "Pin index cannot be negative.");
+    Writeln(theEnv, "Pin name is not valid.");
     UDFThrowError(context);
     return;
   }
 
-  // (any-instancep ((?pin PIN)) (= (str-compare ?pin:id "D2") 0))
-  if (!pinInstanceExists(theEnv, pinArg))
+  CLIPSValue *insdata = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
+  insdata->instanceValue = FindInstance(theEnv, NULL, pinArg, true);
+  if (insdata->instanceValue == nullptr)
   {
+    genfree(theEnv, insdata, sizeof(CLIPSValue));
     Write(theEnv, pinArg);
     Writeln(theEnv, " pin has not yet been registered.");
     UDFThrowError(context);
     return;
   }
 
-  // send [instance] get-mode == INPUT / OUTPUT?
+  CLIPSValue *modeSlotVal = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
+  if (DirectGetSlot(insdata->instanceValue, "mode", modeSlotVal) != GSE_NO_ERROR)
+  {
+    genfree(theEnv, insdata, sizeof(CLIPSValue));
+    genfree(theEnv, modeSlotVal, sizeof(CLIPSValue));
+    // se non riesco a leggere l'attributo mode della classe PIN
+    Writeln(theEnv, "Pin instance is not valid.");
+    UDFThrowError(context);
+    return;
+  }
+
+  if (strcmp(modeSlotVal->lexemeValue->contents, "OUTPUT") != 0)
+  {
+    genfree(theEnv, insdata, sizeof(CLIPSValue));
+    genfree(theEnv, modeSlotVal, sizeof(CLIPSValue));
+    Write(theEnv, "Pin ");
+    Write(theEnv, pinArg);
+    Writeln(theEnv, " is not in OUTPUT mode.");
+    UDFThrowError(context);
+    return;
+  }
+  genfree(theEnv, modeSlotVal, sizeof(CLIPSValue));
 
   if (stateArg != nullptr && strcmp(stateArg, "LOW") == 0)
   {
     digitalWrite(pin, LOW);
+    Send(theEnv, insdata, "put-value", CreateSymbol(theEnv, "LOW")->contents, NULL);
+    genfree(theEnv, insdata, sizeof(CLIPSValue));
   }
   else if (stateArg != nullptr && strcmp(stateArg, "HIGH") == 0)
   {
     digitalWrite(pin, HIGH);
+    Send(theEnv, insdata, "put-value", CreateSymbol(theEnv, "HIGH")->contents, NULL);
+    genfree(theEnv, insdata, sizeof(CLIPSValue));
   }
   else
   {
+    genfree(theEnv, insdata, sizeof(CLIPSValue));
     UDFThrowError(context);
   }
 }
@@ -212,8 +235,15 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
   int pin = getPinFromName(pinArg);
   if (pin < 0)
   {
-    Writeln(theEnv, "Pin index cannot be negative.");
+    Writeln(theEnv, "Pin name is not valid.");
     UDFThrowError(context);
+    return;
+  }
+
+  returnValue->instanceValue = FindInstance(theEnv, NULL, pinArg, true);
+  if (returnValue->instanceValue != NULL)
+  {
+    Writeln(theEnv, "Pin is already defined. No action performed.");
     return;
   }
 
@@ -284,10 +314,12 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
     // makeInstCmd += modeArg;
     // makeInstCmd += "\"))";
     // MakeInstance(theEnv, makeInstCmd.c_str());
+    returnValue->instanceValue = nullptr;
     UDFThrowError(context);
   }
   else
   {
+    returnValue->instanceValue = nullptr;
     UDFThrowError(context);
   }
 }

@@ -44,7 +44,6 @@
 #include "clips_digital_io.h"
 
 bool stringComplete = false;
-bool stringInEdit = false;
 bool systemReady = false;
 static Environment *mainEnv;
 
@@ -82,6 +81,49 @@ static void WriteTraceCallback(
 
     Serial.print(str);
   }
+}
+
+void ArduninoInitFunction(Environment *theEnv, void *context)
+{
+  bool doEval = false;
+
+  if (FindFunction(theEnv, "digital-read") == NULL)
+  {
+    AddUDF(theEnv, "digital-read", "y", 1, 1, ";y", DigitalReadFunction, "DigitalReadFunction", NULL);
+    doEval = true;
+  }
+  if (FindFunction(theEnv, "digital-write") == NULL)
+  {
+    AddUDF(theEnv, "digital-write", "v", 2, 2, ";y;y", DigitalWriteFunction, "DigitalWriteFunction", NULL);
+    doEval = true;
+  }
+  if (FindFunction(theEnv, "pin-mode") == NULL)
+  {
+    AddUDF(theEnv, "pin-mode", "i", 2, 2, ";y;y", PinModeFunction, "PinModeFunction", NULL);
+    doEval = true;
+  }
+
+  if (FindDefclass(theEnv, "PIN") == NULL)
+  {
+    Build(theEnv, "(defclass PIN \"A generic Arduino GPIO pin.\" (is-a USER) (role concrete) (pattern-match reactive)"
+                  "   (slot value (type SYMBOL NUMBER))"
+                  "   (slot mode (type SYMBOL)(default nil)(allowed-symbols nil INPUT OUTPUT))"
+                  ")");
+    doEval = true;
+  }
+
+  if (doEval)
+  {
+    Eval(theEnv, "(pin-mode LED_RED OUTPUT)", NULL);
+    Eval(theEnv, "(pin-mode LED_GREEN OUTPUT)", NULL);
+    Eval(theEnv, "(pin-mode LED_BLUE OUTPUT)", NULL);
+
+    Eval(theEnv, "(digital-write LED_RED HIGH)", NULL);
+    Eval(theEnv, "(digital-write LED_GREEN HIGH)", NULL);
+    Eval(theEnv, "(digital-write LED_BLUE HIGH)", NULL);
+  }
+
+  Writeln(theEnv, "Arduino Nano ESP32 + CLIPS ready!");
 }
 
 void setup()
@@ -126,6 +168,8 @@ void setup()
   // verbose_print_reset_reason(rtc_get_reset_reason(1));
 
   mainEnv = CreateEnvironment();
+  UtilityData(mainEnv)->YieldTimeFunction = yield; // esp32-hal.h
+  EnableYieldFunction(mainEnv, true);
 
   AddRouter(mainEnv,
             "trace",            /* Router name */
@@ -148,38 +192,24 @@ void setup()
   CleanCurrentGarbageFrame(mainEnv, NULL);
   CallPeriodicTasks(mainEnv);
 
-  PrintPrompt(mainEnv);
   RouterData(mainEnv)->CommandBufferInputCount = 0;
   RouterData(mainEnv)->InputUngets = 0;
   RouterData(mainEnv)->AwaitingInput = true;
 
-  Build(mainEnv, "(defclass PIN \"A generic Arduino GPIO pin.\" (is-a USER) (role concrete) (pattern-match reactive)"
-                 "   (slot value (type SYMBOL NUMBER))"
-                 "   (slot mode (type SYMBOL)(default nil)(allowed-symbols nil INPUT OUTPUT))"
-                 ")");
+  AddStartingFunction(mainEnv, "arduino-init", ArduninoInitFunction, 2001, NULL);
 
-  // adding digital_io wrapper functions
-  AddUDF(mainEnv, "digital-read", "y", 1, 1, ";y", DigitalReadFunction, "DigitalReadFunction", NULL);
-  AddUDF(mainEnv, "digital-write", "v", 2, 2, ";y;y", DigitalWriteFunction, "DigitalWriteFunction", NULL);
-  AddUDF(mainEnv, "pin-mode", "i", 2, 2, ";y;y", PinModeFunction, "PinModeFunction", NULL);
-
-  Writeln(mainEnv, "Arduino Nano ESP32 + CLIPS ready!");
-  PrintPrompt(mainEnv);
+  Reset(mainEnv);
+  Writeln(mainEnv, "");
   systemReady = true;
+  PrintPrompt(mainEnv);
 }
 
 void loop()
 {
   digitalWrite(LED_BUILTIN, HIGH);
 
-  if (!stringInEdit)
-  {
-    CallPeriodicTasks(mainEnv);
-  }
-
   while (Serial.available())
   {
-    stringInEdit = true;
     char inChar = (char)Serial.read();
     AppendNCommandString(mainEnv, &inChar, 1);
 
@@ -193,7 +223,6 @@ void loop()
   {
     Serial.println(GetCommandString(mainEnv)); // debug
     stringComplete = false;
-    stringInEdit = false;
 
     /*
      * True if a complete command exists, then 1 is returned.
@@ -203,7 +232,7 @@ void loop()
     ExecuteIfCommandComplete(mainEnv);
   }
 
-  delay(100);                     // debug
+  delay(50);                      // debug
   digitalWrite(LED_BUILTIN, LOW); // debug
-  delay(400);
+  delay(450);
 }

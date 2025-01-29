@@ -160,6 +160,7 @@ struct utilityData
   {
    struct voidCallFunctionItem *ListOfCleanupFunctions;
    struct voidCallFunctionItem *ListOfPeriodicFunctions;
+   struct voidCallFunctionItem *ListOfStartingFunctions;
    bool PeriodicFunctionsEnabled;
    bool YieldFunctionEnabled;
    void (*YieldTimeFunction)(void);
@@ -242,6 +243,10 @@ struct utilityData
    void                          *GetPeriodicFunctionContext(Environment *,const char *);
    void                           BufferedRead(Environment *,void *,size_t);
    void                           FreeReadBuffer(Environment *);
+
+   // Arduino Nano ESP32 + CLIPS adds:
+   bool                           AddStartingFunction(Environment *,const char *,VoidCallFunction *,int,void *);
+   void                           CallStartingTasks(Environment *);
 
 #endif /* _H_utility */
 
