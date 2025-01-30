@@ -44,7 +44,6 @@
 #include "clips_digital_io.h"
 
 bool stringComplete = false;
-bool systemReady = false;
 static Environment *mainEnv;
 
 static bool QueryTraceCallback(
@@ -85,43 +84,62 @@ static void WriteTraceCallback(
 
 void ArduninoInitFunction(Environment *theEnv, void *context)
 {
-  bool doEval = false;
-
+  AddUDFError addUDFError = AddUDFError::AUE_NO_ERROR;
   if (FindFunction(theEnv, "digital-read") == NULL)
   {
-    AddUDF(theEnv, "digital-read", "y", 1, 1, ";y", DigitalReadFunction, "DigitalReadFunction", NULL);
-    doEval = true;
+    addUDFError = AddUDF(theEnv, "digital-read", "y", 1, 1, ";y", DigitalReadFunction, "DigitalReadFunction", NULL);
+    if (addUDFError != AddUDFError::AUE_NO_ERROR)
+    {
+      Write(theEnv, "ArduninoInitFunction digital-read: ");
+      WriteInteger(theEnv, STDOUT, addUDFError);
+      Writeln(theEnv, "");
+      return;
+    }
   }
   if (FindFunction(theEnv, "digital-write") == NULL)
   {
-    AddUDF(theEnv, "digital-write", "v", 2, 2, ";y;y", DigitalWriteFunction, "DigitalWriteFunction", NULL);
-    doEval = true;
+    addUDFError = AddUDF(theEnv, "digital-write", "v", 2, 2, ";y;y", DigitalWriteFunction, "DigitalWriteFunction", NULL);
+    if (addUDFError != AddUDFError::AUE_NO_ERROR)
+    {
+      Write(theEnv, "ArduninoInitFunction digital-write: ");
+      WriteInteger(theEnv, STDOUT, addUDFError);
+      Writeln(theEnv, "");
+      return;
+    }
   }
   if (FindFunction(theEnv, "pin-mode") == NULL)
   {
-    AddUDF(theEnv, "pin-mode", "i", 2, 2, ";y;y", PinModeFunction, "PinModeFunction", NULL);
-    doEval = true;
+    addUDFError = AddUDF(theEnv, "pin-mode", "i", 2, 2, ";y;y", PinModeFunction, "PinModeFunction", NULL);
+    if (addUDFError != AddUDFError::AUE_NO_ERROR)
+    {
+      Write(theEnv, "ArduninoInitFunction pin-mode: ");
+      WriteInteger(theEnv, STDOUT, addUDFError);
+      Writeln(theEnv, "");
+      return;
+    }
   }
 
   if (FindDefclass(theEnv, "PIN") == NULL)
   {
-    Build(theEnv, "(defclass PIN \"A generic Arduino GPIO pin.\" (is-a USER) (role concrete) (pattern-match reactive)"
-                  "   (slot value (type SYMBOL NUMBER))"
-                  "   (slot mode (type SYMBOL)(default nil)(allowed-symbols nil INPUT OUTPUT))"
-                  ")");
-    doEval = true;
+    BuildError buildError = Build(theEnv, "(defclass PIN \"A generic Arduino GPIO pin.\" (is-a USER) (role concrete) (pattern-match reactive)"
+                                          "   (slot value (type SYMBOL NUMBER))"
+                                          "   (slot mode (type SYMBOL)(default nil)(allowed-symbols nil INPUT OUTPUT))"
+                                          ")");
+    if (buildError != EE_NO_ERROR)
+    {
+      Write(theEnv, "ArduninoInitFunction defclass-PIN: ");
+      WriteInteger(theEnv, STDOUT, buildError);
+      Writeln(theEnv, "");
+      return;
+    }
   }
 
-  if (doEval)
-  {
-    Eval(theEnv, "(pin-mode LED_RED OUTPUT)", NULL);
-    Eval(theEnv, "(pin-mode LED_GREEN OUTPUT)", NULL);
-    Eval(theEnv, "(pin-mode LED_BLUE OUTPUT)", NULL);
-
-    Eval(theEnv, "(digital-write LED_RED HIGH)", NULL);
-    Eval(theEnv, "(digital-write LED_GREEN HIGH)", NULL);
-    Eval(theEnv, "(digital-write LED_BLUE HIGH)", NULL);
-  }
+  Eval(theEnv, "(pin-mode LED_RED OUTPUT)", NULL);
+  Eval(theEnv, "(pin-mode LED_GREEN OUTPUT)", NULL);
+  Eval(theEnv, "(pin-mode LED_BLUE OUTPUT)", NULL);
+  Eval(theEnv, "(digital-write LED_RED HIGH)", NULL);
+  Eval(theEnv, "(digital-write LED_GREEN HIGH)", NULL);
+  Eval(theEnv, "(digital-write LED_BLUE HIGH)", NULL);
 
   Writeln(theEnv, "Arduino Nano ESP32 + CLIPS ready!");
 }
@@ -154,18 +172,20 @@ void setup()
     return;
   }
 
-  // TODO: wdt disabled!!!
-  // rtc_wdt_protect_off();
-  // rtc_wdt_disable();
-  // esp_task_wdt_delete(NULL);
+#if DEBUGGING_FUNCTIONS
+// TODO: wdt disabled!!!
+// rtc_wdt_protect_off();
+// rtc_wdt_disable();
+// esp_task_wdt_delete(NULL);
 
-  // Serial.println("CPU0 reset reason:");
-  // print_reset_reason(rtc_get_reset_reason(0));
-  // verbose_print_reset_reason(rtc_get_reset_reason(0));
+// Serial.println("CPU0 reset reason:");
+// print_reset_reason(rtc_get_reset_reason(0));
+// verbose_print_reset_reason(rtc_get_reset_reason(0));
 
-  // Serial.println("CPU1 reset reason:");
-  // print_reset_reason(rtc_get_reset_reason(1));
-  // verbose_print_reset_reason(rtc_get_reset_reason(1));
+// Serial.println("CPU1 reset reason:");
+// print_reset_reason(rtc_get_reset_reason(1));
+// verbose_print_reset_reason(rtc_get_reset_reason(1));
+#endif
 
   mainEnv = CreateEnvironment();
   UtilityData(mainEnv)->YieldTimeFunction = yield; // esp32-hal.h
@@ -200,7 +220,6 @@ void setup()
 
   Reset(mainEnv);
   Writeln(mainEnv, "");
-  systemReady = true;
   PrintPrompt(mainEnv);
 }
 
@@ -221,8 +240,11 @@ void loop()
 
   if (stringComplete)
   {
-    Serial.println(GetCommandString(mainEnv)); // debug
     stringComplete = false;
+
+#if DEBUGGING_FUNCTIONS
+    Serial.println(GetCommandString(mainEnv)); // debug
+#endif
 
     /*
      * True if a complete command exists, then 1 is returned.
@@ -232,7 +254,9 @@ void loop()
     ExecuteIfCommandComplete(mainEnv);
   }
 
+#if DEBUGGING_FUNCTIONS
   delay(50);                      // debug
   digitalWrite(LED_BUILTIN, LOW); // debug
   delay(450);
+#endif
 }

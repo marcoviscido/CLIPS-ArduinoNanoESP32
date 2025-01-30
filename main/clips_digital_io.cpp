@@ -68,45 +68,42 @@ void DigitalReadFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
   insdata->instanceValue = FindInstance(theEnv, NULL, pinArg, true);
   if (insdata->instanceValue == nullptr)
   {
-    genfree(theEnv, insdata, sizeof(CLIPSValue));
     Write(theEnv, pinArg);
     Writeln(theEnv, " pin has not yet been registered.");
     UDFThrowError(context);
+    genfree(theEnv, insdata, sizeof(CLIPSValue));
     return;
   }
 
-  CLIPSValue *modeSlotVal = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
-  if (DirectGetSlot(insdata->instanceValue, "mode", modeSlotVal) != GSE_NO_ERROR)
+  InstanceSlot *modeSlot = FindInstanceSlot(theEnv, insdata->instanceValue, CreateSymbol(theEnv, "mode"));
+  if (modeSlot == nullptr)
   {
-    genfree(theEnv, insdata, sizeof(CLIPSValue));
-    genfree(theEnv, modeSlotVal, sizeof(CLIPSValue));
     // se non riesco a leggere l'attributo mode della classe PIN
-    Writeln(theEnv, "Pin instance is not valid.");
+    Writeln(theEnv, "Pin instance is not valid. Slot mode not found.");
     UDFThrowError(context);
-    return;
-  }
-
-  if (strcmp(modeSlotVal->lexemeValue->contents, "INPUT") != 0)
-  {
-    genfree(theEnv, modeSlotVal, sizeof(CLIPSValue));
-    genfree(theEnv, insdata, sizeof(CLIPSValue));
-    Write(theEnv, "Pin ");
-    Write(theEnv, pinArg);
-    Writeln(theEnv, " is not in INPUT mode.");
-    UDFThrowError(context);
-    return;
-  }
-  genfree(theEnv, modeSlotVal, sizeof(CLIPSValue));
-
-  if (digitalRead(pin) == 0)
-  {
-    returnValue->lexemeValue = CreateSymbol(theEnv, "LOW");
   }
   else
   {
-    returnValue->lexemeValue = CreateSymbol(theEnv, "HIGH");
+    if (strcmp(modeSlot->lexemeValue->contents, "INPUT") != 0)
+    {
+      Write(theEnv, "Pin ");
+      Write(theEnv, pinArg);
+      Writeln(theEnv, " is not in INPUT mode.");
+      UDFThrowError(context);
+      genfree(theEnv, insdata, sizeof(CLIPSValue));
+      return;
+    }
+
+    if (digitalRead(pin) == 0)
+    {
+      returnValue->lexemeValue = CreateSymbol(theEnv, "LOW");
+    }
+    else
+    {
+      returnValue->lexemeValue = CreateSymbol(theEnv, "HIGH");
+    }
+    Send(theEnv, insdata, "put-value", returnValue->lexemeValue->contents, NULL);
   }
-  Send(theEnv, insdata, "put-value", returnValue->lexemeValue->contents, NULL);
   genfree(theEnv, insdata, sizeof(CLIPSValue));
 }
 
@@ -150,54 +147,52 @@ void DigitalWriteFunction(Environment *theEnv, UDFContext *context, UDFValue *re
   insdata->instanceValue = FindInstance(theEnv, NULL, pinArg, true);
   if (insdata->instanceValue == nullptr)
   {
-    genfree(theEnv, insdata, sizeof(CLIPSValue));
     Write(theEnv, pinArg);
     Writeln(theEnv, " pin has not yet been registered.");
     UDFThrowError(context);
+    genfree(theEnv, insdata, sizeof(CLIPSValue));
     return;
   }
 
-  CLIPSValue *modeSlotVal = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
-  if (DirectGetSlot(insdata->instanceValue, "mode", modeSlotVal) != GSE_NO_ERROR)
+  InstanceSlot *modeSlot = FindInstanceSlot(theEnv, insdata->instanceValue, CreateSymbol(theEnv, "mode"));
+  if (modeSlot == nullptr)
   {
-    genfree(theEnv, insdata, sizeof(CLIPSValue));
-    genfree(theEnv, modeSlotVal, sizeof(CLIPSValue));
-    // se non riesco a leggere l'attributo mode della classe PIN
-    Writeln(theEnv, "Pin instance is not valid.");
+    Writeln(theEnv, "Pin instance is not valid. Slot mode not found.");
     UDFThrowError(context);
-    return;
-  }
-
-  if (strcmp(modeSlotVal->lexemeValue->contents, "OUTPUT") != 0)
-  {
-    genfree(theEnv, insdata, sizeof(CLIPSValue));
-    genfree(theEnv, modeSlotVal, sizeof(CLIPSValue));
-    Write(theEnv, "Pin ");
-    Write(theEnv, pinArg);
-    Writeln(theEnv, " is not in OUTPUT mode.");
-    UDFThrowError(context);
-    return;
-  }
-  genfree(theEnv, modeSlotVal, sizeof(CLIPSValue));
-
-  if (stateArg != nullptr && strcmp(stateArg, "LOW") == 0)
-  {
-    digitalWrite(pin, LOW);
-    Send(theEnv, insdata, "put-value", CreateSymbol(theEnv, "LOW")->contents, NULL);
-    genfree(theEnv, insdata, sizeof(CLIPSValue));
-  }
-  else if (stateArg != nullptr && strcmp(stateArg, "HIGH") == 0)
-  {
-    digitalWrite(pin, HIGH);
-    Send(theEnv, insdata, "put-value", CreateSymbol(theEnv, "HIGH")->contents, NULL);
-    genfree(theEnv, insdata, sizeof(CLIPSValue));
   }
   else
   {
-    genfree(theEnv, insdata, sizeof(CLIPSValue));
-    UDFThrowError(context);
+    if (strcmp(modeSlot->lexemeValue->contents, "OUTPUT") != 0)
+    {
+      Write(theEnv, "Pin ");
+      Write(theEnv, pinArg);
+      Writeln(theEnv, " is not in OUTPUT mode.");
+      UDFThrowError(context);
+      genfree(theEnv, insdata, sizeof(CLIPSValue));
+      return;
+    }
+
+    if (stateArg != nullptr && strcmp(stateArg, "LOW") == 0)
+    {
+      digitalWrite(pin, LOW);
+      Send(theEnv, insdata, "put-value", "LOW", NULL);
+    }
+    else if (stateArg != nullptr && strcmp(stateArg, "HIGH") == 0)
+    {
+      digitalWrite(pin, HIGH);
+      Send(theEnv, insdata, "put-value", "HIGH", NULL);
+    }
+    else
+    {
+      UDFThrowError(context);
+    }
   }
+  genfree(theEnv, insdata, sizeof(CLIPSValue));
 }
+
+void setPinModeMakeInstance(const int pin, const char *pinArg, const char *modeArg, Environment *theEnv, UDFContext *context, UDFValue *returnValue);
+
+///////////////
 
 /**
  * Ex.: (pin-mode D5 OUTPUT)
@@ -208,8 +203,10 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
   const char *pinArg;
   const char *modeArg;
 
+  // CONTROLLO ARGOMENTI
   if (!UDFNthArgument(context, 1, SYMBOL_BIT, &nextPossible))
   {
+    returnValue->instanceValue = nullptr;
     return;
   }
   pinArg = nextPossible.lexemeValue->contents;
@@ -217,11 +214,14 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
   {
     SetErrorValue(theEnv, nextPossible.header);
     UDFThrowError(context);
+    returnValue->instanceValue = nullptr;
     return;
   }
 
+  // CONTROLLO ARGOMENTI
   if (!UDFNthArgument(context, 2, SYMBOL_BIT, &nextPossible))
   {
+    returnValue->instanceValue = nullptr;
     return;
   }
   modeArg = nextPossible.lexemeValue->contents;
@@ -229,24 +229,113 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
   {
     SetErrorValue(theEnv, nextPossible.header);
     UDFThrowError(context);
+    returnValue->instanceValue = nullptr;
     return;
   }
 
+  // VALIDAZIONE ARGOMENTO PIN
   int pin = getPinFromName(pinArg);
   if (pin < 0)
   {
     Writeln(theEnv, "Pin name is not valid.");
     UDFThrowError(context);
+    returnValue->instanceValue = nullptr;
     return;
   }
 
+  // SE NON ESISTE ISTANZA PER IL PIN INDICATO ALLORA LA CREO E RITORNO
+  CLIPSValue *insdata = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
   returnValue->instanceValue = FindInstance(theEnv, NULL, pinArg, true);
-  if (returnValue->instanceValue != NULL)
+  if (returnValue->instanceValue == nullptr)
   {
-    Writeln(theEnv, "Pin is already defined. No action performed.");
+    genfree(theEnv, insdata, sizeof(CLIPSValue));
+    setPinModeMakeInstance(pin, pinArg, modeArg, theEnv, context, returnValue);
     return;
   }
 
+  // ALTRIMENTI LA MODIFICO
+  insdata->instanceValue = returnValue->instanceValue;
+
+  // VERIFICO SE L'ISTANZA POSSIEDE LO SLOT MODE
+  InstanceSlot *modeSlot = FindInstanceSlot(theEnv, insdata->instanceValue, CreateSymbol(theEnv, "mode"));
+  if (modeSlot == nullptr)
+  {
+    Writeln(theEnv, "Pin instance is not valid. Slot mode not found.");
+    UDFThrowError(context);
+    returnValue->instanceValue = nullptr;
+  }
+  else
+  {
+    // PROCEDO CON LA MODIFICA
+    if (modeArg != nullptr && strcmp(modeArg, "INPUT") == 0)
+    {
+      pinMode(pin, INPUT);
+      Send(theEnv, insdata, "put-mode", "INPUT", NULL);
+      returnValue->instanceValue = insdata->instanceValue;
+    }
+    else if (modeArg != nullptr && strcmp(modeArg, "OUTPUT") == 0)
+    {
+      pinMode(pin, OUTPUT);
+      Send(theEnv, insdata, "put-mode", "OUTPUT", NULL);
+      returnValue->instanceValue = insdata->instanceValue;
+    }
+    else if (modeArg != nullptr && strcmp(modeArg, "PULLUP") == 0)
+    {
+      pinMode(pin, PULLUP);
+      Send(theEnv, insdata, "put-mode", "OUTPUT", NULL);
+      returnValue->instanceValue = insdata->instanceValue;
+    }
+    else if (modeArg != nullptr && strcmp(modeArg, "INPUT_PULLUP") == 0)
+    {
+      pinMode(pin, INPUT_PULLUP);
+      Send(theEnv, insdata, "put-mode", "INPUT", NULL);
+      returnValue->instanceValue = insdata->instanceValue;
+    }
+    else if (modeArg != nullptr && strcmp(modeArg, "PULLDOWN") == 0)
+    {
+      pinMode(pin, PULLDOWN);
+      Send(theEnv, insdata, "put-mode", "OUTPUT", NULL);
+      returnValue->instanceValue = insdata->instanceValue;
+    }
+    else if (modeArg != nullptr && strcmp(modeArg, "INPUT_PULLDOWN") == 0)
+    {
+      pinMode(pin, INPUT_PULLDOWN);
+      Send(theEnv, insdata, "put-mode", "INPUT", NULL);
+      returnValue->instanceValue = insdata->instanceValue;
+    }
+    else if (modeArg != nullptr && strcmp(modeArg, "OPEN_DRAIN") == 0)
+    {
+      pinMode(pin, OPEN_DRAIN);
+      Send(theEnv, insdata, "put-mode", "INPUT", NULL);
+      returnValue->instanceValue = insdata->instanceValue;
+    }
+    else if (modeArg != nullptr && strcmp(modeArg, "OUTPUT_OPEN_DRAIN") == 0)
+    {
+      pinMode(pin, OUTPUT_OPEN_DRAIN);
+      Send(theEnv, insdata, "put-mode", "OUTPUT", NULL);
+      returnValue->instanceValue = insdata->instanceValue;
+    }
+    else if (modeArg != nullptr && strcmp(modeArg, "ANALOG") == 0)
+    {
+      // pinMode(pin, ANALOG);
+      returnValue->instanceValue = nullptr;
+      UDFThrowError(context);
+    }
+    else
+    {
+      returnValue->instanceValue = nullptr;
+      UDFThrowError(context);
+    }
+  }
+  genfree(theEnv, insdata, sizeof(CLIPSValue));
+}
+
+/**
+ * Costruisce una nuova instanza della classe PIN con gli argomenti forniti in input.
+ * Ritorna void ma assegna al returnValue l'ID associato all'istanza creata oppure NULL.
+ */
+void setPinModeMakeInstance(const int pin, const char *pinArg, const char *modeArg, Environment *theEnv, UDFContext *context, UDFValue *returnValue)
+{
   String makeInstCmd = "(";
   makeInstCmd += pinArg;
   makeInstCmd += " of PIN ";
