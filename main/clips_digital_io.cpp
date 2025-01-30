@@ -234,6 +234,8 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
     return;
   }
 
+  // TODO: check modeArg in INPUT, OUTPUT, PULLUP, INPUT_PULLUP, PULLDOWN, INPUT_PULLDOWN, OPEN_DRAIN, OUTPUT_OPEN_DRAIN
+
   // VALIDAZIONE ARGOMENTO PIN
   int pin = getPinFromName(pinArg);
   if (pin < 0)
@@ -268,64 +270,66 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
   else
   {
     // PROCEDO CON LA MODIFICA
-    if (modeArg != nullptr && strcmp(modeArg, "INPUT") == 0)
+    if (strcmp(modeArg, "INPUT") == 0)
     {
       pinMode(pin, INPUT);
       Send(theEnv, insdata, "put-mode", "INPUT", NULL);
       returnValue->instanceValue = insdata->instanceValue;
     }
-    else if (modeArg != nullptr && strcmp(modeArg, "OUTPUT") == 0)
+    else if (strcmp(modeArg, "OUTPUT") == 0)
     {
       pinMode(pin, OUTPUT);
       Send(theEnv, insdata, "put-mode", "OUTPUT", NULL);
       returnValue->instanceValue = insdata->instanceValue;
     }
-    else if (modeArg != nullptr && strcmp(modeArg, "PULLUP") == 0)
+    else if (strcmp(modeArg, "PULLUP") == 0)
     {
       pinMode(pin, PULLUP);
       Send(theEnv, insdata, "put-mode", "OUTPUT", NULL);
       returnValue->instanceValue = insdata->instanceValue;
     }
-    else if (modeArg != nullptr && strcmp(modeArg, "INPUT_PULLUP") == 0)
+    else if (strcmp(modeArg, "INPUT_PULLUP") == 0)
     {
       pinMode(pin, INPUT_PULLUP);
       Send(theEnv, insdata, "put-mode", "INPUT", NULL);
       returnValue->instanceValue = insdata->instanceValue;
     }
-    else if (modeArg != nullptr && strcmp(modeArg, "PULLDOWN") == 0)
+    else if (strcmp(modeArg, "PULLDOWN") == 0)
     {
       pinMode(pin, PULLDOWN);
       Send(theEnv, insdata, "put-mode", "OUTPUT", NULL);
       returnValue->instanceValue = insdata->instanceValue;
     }
-    else if (modeArg != nullptr && strcmp(modeArg, "INPUT_PULLDOWN") == 0)
+    else if (strcmp(modeArg, "INPUT_PULLDOWN") == 0)
     {
       pinMode(pin, INPUT_PULLDOWN);
       Send(theEnv, insdata, "put-mode", "INPUT", NULL);
       returnValue->instanceValue = insdata->instanceValue;
     }
-    else if (modeArg != nullptr && strcmp(modeArg, "OPEN_DRAIN") == 0)
+    else if (strcmp(modeArg, "OPEN_DRAIN") == 0)
     {
       pinMode(pin, OPEN_DRAIN);
       Send(theEnv, insdata, "put-mode", "INPUT", NULL);
       returnValue->instanceValue = insdata->instanceValue;
     }
-    else if (modeArg != nullptr && strcmp(modeArg, "OUTPUT_OPEN_DRAIN") == 0)
+    else if (strcmp(modeArg, "OUTPUT_OPEN_DRAIN") == 0)
     {
       pinMode(pin, OUTPUT_OPEN_DRAIN);
       Send(theEnv, insdata, "put-mode", "OUTPUT", NULL);
       returnValue->instanceValue = insdata->instanceValue;
     }
-    else if (modeArg != nullptr && strcmp(modeArg, "ANALOG") == 0)
-    {
-      // pinMode(pin, ANALOG);
-      returnValue->instanceValue = nullptr;
-      UDFThrowError(context);
-    }
+    // else if (strcmp(modeArg, "ANALOG") == 0)
+    // {
+    //   // pinMode(pin, ANALOG);
+    //   returnValue->instanceValue = nullptr;
+    //   UDFThrowError(context);
+    //   return;
+    // }
     else
     {
-      returnValue->instanceValue = nullptr;
+      UDFInvalidArgumentMessage(context, "symbol with value INPUT, OUTPUT, PULLUP, INPUT_PULLUP, PULLDOWN, INPUT_PULLDOWN, OPEN_DRAIN, OUTPUT_OPEN_DRAIN");
       UDFThrowError(context);
+      return;
     }
   }
   genfree(theEnv, insdata, sizeof(CLIPSValue));
@@ -382,16 +386,16 @@ void setPinModeMakeInstance(const int pin, const char *pinArg, const char *modeA
     pinMode(pin, OUTPUT_OPEN_DRAIN);
     makeInstCmd += "OUTPUT";
   }
-  else if (modeArg != nullptr && strcmp(modeArg, "ANALOG") == 0)
-  {
-    // pinMode(pin, ANALOG); ???
-    returnValue->instanceValue = nullptr;
-    UDFThrowError(context);
-    return;
-  }
+  // else if (modeArg != nullptr && strcmp(modeArg, "ANALOG") == 0)
+  // {
+  //   // pinMode(pin, ANALOG); ???
+  //   returnValue->instanceValue = nullptr;
+  //   UDFThrowError(context);
+  //   return;
+  // }
   else
   {
-    returnValue->instanceValue = nullptr;
+    UDFInvalidArgumentMessage(context, "symbol with value INPUT, OUTPUT, PULLUP, INPUT_PULLUP, PULLDOWN, INPUT_PULLDOWN, OPEN_DRAIN, OUTPUT_OPEN_DRAIN");
     UDFThrowError(context);
     return;
   }

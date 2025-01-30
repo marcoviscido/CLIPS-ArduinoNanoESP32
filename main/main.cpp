@@ -125,7 +125,7 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
                                           "   (slot value (type SYMBOL NUMBER))"
                                           "   (slot mode (type SYMBOL)(default nil)(allowed-symbols nil INPUT OUTPUT))"
                                           ")");
-    if (buildError != EE_NO_ERROR)
+    if (buildError != BuildError::BE_NO_ERROR)
     {
       Write(theEnv, "ArduninoInitFunction defclass-PIN: ");
       WriteInteger(theEnv, STDOUT, buildError);
@@ -172,6 +172,8 @@ void setup()
     delay(2000);
     return;
   }
+
+  // TODO: https://github.com/espressif/esp-idf/blob/v5.4/examples/protocols/sntp/README.md
 
 #if DEBUGGING_FUNCTIONS
 // TODO: wdt disabled!!!
@@ -226,8 +228,6 @@ void setup()
 
 void loop()
 {
-  digitalWrite(LED_BUILTIN, HIGH);
-
   while (Serial.available())
   {
     char inChar = (char)Serial.read();
@@ -254,10 +254,4 @@ void loop()
      */
     ExecuteIfCommandComplete(mainEnv);
   }
-
-#if DEBUGGING_FUNCTIONS
-  delay(50);                      // debug
-  digitalWrite(LED_BUILTIN, LOW); // debug
-  delay(450);
-#endif
 }
