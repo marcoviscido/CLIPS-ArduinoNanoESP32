@@ -140,6 +140,7 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
   Eval(theEnv, "(digital-write LED_RED HIGH)", NULL);
   Eval(theEnv, "(digital-write LED_GREEN HIGH)", NULL);
   Eval(theEnv, "(digital-write LED_BLUE HIGH)", NULL);
+  // TODO: reset all pin related to existing instances
 
   Writeln(theEnv, "Arduino Nano ESP32 + CLIPS ready!");
 }

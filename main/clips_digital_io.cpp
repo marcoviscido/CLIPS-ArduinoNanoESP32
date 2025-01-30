@@ -184,6 +184,7 @@ void DigitalWriteFunction(Environment *theEnv, UDFContext *context, UDFValue *re
     }
     else
     {
+      UDFInvalidArgumentMessage(context, "symbol with value LOW or HIGH");
       UDFThrowError(context);
     }
   }
@@ -339,76 +340,62 @@ void setPinModeMakeInstance(const int pin, const char *pinArg, const char *modeA
   String makeInstCmd = "(";
   makeInstCmd += pinArg;
   makeInstCmd += " of PIN ";
-  makeInstCmd += "(mode \"";
+  makeInstCmd += "(mode ";
 
   if (modeArg != nullptr && strcmp(modeArg, "INPUT") == 0)
   {
     pinMode(pin, INPUT);
     makeInstCmd += "INPUT";
-    makeInstCmd += "\"))";
-    returnValue->instanceValue = MakeInstance(theEnv, makeInstCmd.c_str());
   }
   else if (modeArg != nullptr && strcmp(modeArg, "OUTPUT") == 0)
   {
     pinMode(pin, OUTPUT);
     makeInstCmd += "OUTPUT";
-    makeInstCmd += "\"))";
-    returnValue->instanceValue = MakeInstance(theEnv, makeInstCmd.c_str());
   }
   else if (modeArg != nullptr && strcmp(modeArg, "PULLUP") == 0)
   {
     pinMode(pin, PULLUP);
     makeInstCmd += "OUTPUT";
-    makeInstCmd += "\"))";
-    returnValue->instanceValue = MakeInstance(theEnv, makeInstCmd.c_str());
   }
   else if (modeArg != nullptr && strcmp(modeArg, "INPUT_PULLUP") == 0)
   {
     pinMode(pin, INPUT_PULLUP);
     makeInstCmd += "INPUT";
-    makeInstCmd += "\"))";
-    returnValue->instanceValue = MakeInstance(theEnv, makeInstCmd.c_str());
   }
   else if (modeArg != nullptr && strcmp(modeArg, "PULLDOWN") == 0)
   {
     pinMode(pin, PULLDOWN);
     makeInstCmd += "OUTPUT";
-    makeInstCmd += "\"))";
-    returnValue->instanceValue = MakeInstance(theEnv, makeInstCmd.c_str());
   }
   else if (modeArg != nullptr && strcmp(modeArg, "INPUT_PULLDOWN") == 0)
   {
     pinMode(pin, INPUT_PULLDOWN);
     makeInstCmd += "INPUT";
-    makeInstCmd += "\"))";
-    returnValue->instanceValue = MakeInstance(theEnv, makeInstCmd.c_str());
   }
   else if (modeArg != nullptr && strcmp(modeArg, "OPEN_DRAIN") == 0)
   {
     pinMode(pin, OPEN_DRAIN);
     makeInstCmd += "INPUT";
-    makeInstCmd += "\"))";
-    returnValue->instanceValue = MakeInstance(theEnv, makeInstCmd.c_str());
   }
   else if (modeArg != nullptr && strcmp(modeArg, "OUTPUT_OPEN_DRAIN") == 0)
   {
     pinMode(pin, OUTPUT_OPEN_DRAIN);
     makeInstCmd += "OUTPUT";
-    makeInstCmd += "\"))";
-    returnValue->instanceValue = MakeInstance(theEnv, makeInstCmd.c_str());
   }
   else if (modeArg != nullptr && strcmp(modeArg, "ANALOG") == 0)
   {
-    // pinMode(pin, ANALOG);
-    // makeInstCmd += modeArg;
-    // makeInstCmd += "\"))";
-    // MakeInstance(theEnv, makeInstCmd.c_str());
+    // pinMode(pin, ANALOG); ???
     returnValue->instanceValue = nullptr;
     UDFThrowError(context);
+    return;
   }
   else
   {
     returnValue->instanceValue = nullptr;
     UDFThrowError(context);
+    return;
   }
+
+  makeInstCmd += "))";
+  returnValue->instanceValue = MakeInstance(theEnv, makeInstCmd.c_str());
 }
