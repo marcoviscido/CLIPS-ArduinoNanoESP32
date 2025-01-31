@@ -87,7 +87,7 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
   AddUDFError addUDFError = AddUDFError::AUE_NO_ERROR;
   if (FindFunction(theEnv, "digital-read") == NULL)
   {
-    addUDFError = AddUDF(theEnv, "digital-read", "y", 1, 1, ";y", DigitalReadFunction, "DigitalReadFunction", NULL);
+    addUDFError = AddUDF(theEnv, "digital-read", "y", 1, 1, ";iny", DigitalReadFunction, "DigitalReadFunction", NULL);
     if (addUDFError != AddUDFError::AUE_NO_ERROR)
     {
       Write(theEnv, "ArduninoInitFunction digital-read: ");
@@ -119,12 +119,31 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
     }
   }
 
+  BuildError buildError = BuildError::BE_NO_ERROR;
   if (FindDefclass(theEnv, "PIN") == NULL)
   {
-    BuildError buildError = Build(theEnv, "(defclass PIN \"A generic Arduino GPIO pin.\" (is-a USER) (role concrete) (pattern-match reactive)"
-                                          "   (slot value (type SYMBOL NUMBER))"
-                                          "   (slot mode (type SYMBOL)(default nil)(allowed-symbols nil INPUT OUTPUT))"
-                                          ")");
+    buildError = Build(theEnv, "(defclass PIN \"A generic Arduino GPIO pin.\" (is-a USER) (role concrete) (pattern-match reactive)"
+                               "   (slot value (access read-write) (type SYMBOL NUMBER))"
+                               "   (slot mode (access read-write) (type SYMBOL)(default nil)(allowed-symbols nil INPUT OUTPUT))"
+                               "   (message-handler get-value primary)"
+                               "   (message-handler set-value primary)"
+                               "   (message-handler get-mode primary)"
+                               "   (message-handler set-mode primary)"
+                               ")");
+    if (buildError != BuildError::BE_NO_ERROR)
+    {
+      Write(theEnv, "ArduninoInitFunction defclass-PIN: ");
+      WriteInteger(theEnv, STDOUT, buildError);
+      Writeln(theEnv, "");
+      return;
+    }
+
+    buildError = Build(theEnv, "(defmessage-handler PIN get-value before ()"
+                               "  (if (= (str-compare INPUT ?self:mode) 0)"
+                               "     then"
+                               "     (digital-read (instance-name ?self) )"
+                               "  )"
+                               ")");
     if (buildError != BuildError::BE_NO_ERROR)
     {
       Write(theEnv, "ArduninoInitFunction defclass-PIN: ");

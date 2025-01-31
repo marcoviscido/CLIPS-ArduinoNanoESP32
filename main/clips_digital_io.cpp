@@ -42,14 +42,22 @@ int getPinFromName(const char *key)
 void DigitalReadFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
 {
   UDFValue theArg;
-  const char *pinArg;
+  const char *pinArg = nullptr;
 
-  if (!UDFFirstArgument(context, SYMBOL_BIT, &theArg))
+  if (!UDFFirstArgument(context, INSTANCE_BITS | SYMBOL_BIT, &theArg))
   {
     return;
   }
 
-  pinArg = theArg.lexemeValue->contents;
+  if (CVIsType(&theArg, SYMBOL_BIT | INSTANCE_NAME_BIT))
+  {
+    pinArg = theArg.lexemeValue->contents;
+  }
+  else if (CVIsType(&theArg, INSTANCE_ADDRESS_BIT))
+  {
+    pinArg = theArg.instanceValue->name->contents;
+  }
+
   if (pinArg == nullptr)
   {
     SetErrorValue(theEnv, theArg.header);
@@ -247,6 +255,7 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
     makeInstCmd += pinArg;
     makeInstCmd += " of PIN ";
     makeInstCmd += "(mode ";
+    // todo: add default value
 
     if (modeArg != nullptr && strcmp(modeArg, "INPUT") == 0)
     {
