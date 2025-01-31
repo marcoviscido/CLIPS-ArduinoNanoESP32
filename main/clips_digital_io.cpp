@@ -119,14 +119,23 @@ void DigitalReadFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
 void DigitalWriteFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
 {
   UDFValue nextPossible;
-  const char *pinArg;
+  const char *pinArg = nullptr;
   const char *stateArg;
 
-  if (!UDFNthArgument(context, 1, SYMBOL_BIT, &nextPossible))
+  if (!UDFNthArgument(context, 1, INSTANCE_BITS | SYMBOL_BIT, &nextPossible))
   {
     return;
   }
-  pinArg = nextPossible.lexemeValue->contents;
+
+  if (CVIsType(&nextPossible, SYMBOL_BIT | INSTANCE_NAME_BIT))
+  {
+    pinArg = nextPossible.lexemeValue->contents;
+  }
+  else if (CVIsType(&nextPossible, INSTANCE_ADDRESS_BIT))
+  {
+    pinArg = nextPossible.instanceValue->name->contents;
+  }
+
   if (pinArg == nullptr)
   {
     SetErrorValue(theEnv, nextPossible.header);
@@ -183,12 +192,12 @@ void DigitalWriteFunction(Environment *theEnv, UDFContext *context, UDFValue *re
     if (stateArg != nullptr && strcmp(stateArg, "LOW") == 0)
     {
       digitalWrite(pin, LOW);
-      Send(theEnv, insdata, "put-value", "LOW", NULL);
+      // Send(theEnv, insdata, "put-value", "LOW", NULL); // fatto sulla before put-value
     }
     else if (stateArg != nullptr && strcmp(stateArg, "HIGH") == 0)
     {
       digitalWrite(pin, HIGH);
-      Send(theEnv, insdata, "put-value", "HIGH", NULL);
+      // Send(theEnv, insdata, "put-value", "HIGH", NULL); // fatto sulla before put-value
     }
     else
     {

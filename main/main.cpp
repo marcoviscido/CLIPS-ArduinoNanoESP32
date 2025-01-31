@@ -98,7 +98,7 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
   }
   if (FindFunction(theEnv, "digital-write") == NULL)
   {
-    addUDFError = AddUDF(theEnv, "digital-write", "v", 2, 2, ";y;y", DigitalWriteFunction, "DigitalWriteFunction", NULL);
+    addUDFError = AddUDF(theEnv, "digital-write", "v", 2, 2, ";iny;y", DigitalWriteFunction, "DigitalWriteFunction", NULL);
     if (addUDFError != AddUDFError::AUE_NO_ERROR)
     {
       Write(theEnv, "ArduninoInitFunction digital-write: ");
@@ -142,6 +142,20 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
                                "  (if (= (str-compare INPUT ?self:mode) 0)"
                                "     then"
                                "     (digital-read (instance-name ?self) )"
+                               "  )"
+                               ")");
+    if (buildError != BuildError::BE_NO_ERROR)
+    {
+      Write(theEnv, "ArduninoInitFunction defclass-PIN: ");
+      WriteInteger(theEnv, STDOUT, buildError);
+      Writeln(theEnv, "");
+      return;
+    }
+
+    buildError = Build(theEnv, "(defmessage-handler PIN set-value after (?value)"
+                               "  (if (= (str-compare OUTPUT ?self:mode) 0)"
+                               "     then"
+                               "     (digital-write (instance-name ?self) ?value)"
                                "  )"
                                ")");
     if (buildError != BuildError::BE_NO_ERROR)
