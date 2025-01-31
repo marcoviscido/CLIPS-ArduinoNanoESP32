@@ -255,7 +255,23 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
     makeInstCmd += pinArg;
     makeInstCmd += " of PIN ";
     makeInstCmd += "(mode ";
-    // todo: add default value
+    // todo: add default value (PULLUP->HIGH, etc..)
+
+    gpio_num_t gpioNum = static_cast<gpio_num_t>(pin);
+    if (gpioNum == GPIO_NUM_NC)
+    {
+      UDFInvalidArgumentMessage(context, "symbol of a valid pin name");
+      UDFThrowError(context);
+      return;
+    }
+
+    esp_err_t resetErr = gpio_reset_pin(gpioNum);
+    if (resetErr != ESP_OK)
+    {
+      Writeln(theEnv, "Something goes wrong with the IOMUX for this pin and the GPIO function.");
+      UDFThrowError(context);
+      return;
+    }
 
     if (modeArg != nullptr && strcmp(modeArg, "INPUT") == 0)
     {
