@@ -109,7 +109,7 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
   }
   if (FindFunction(theEnv, "pin-mode") == NULL)
   {
-    addUDFError = AddUDF(theEnv, "pin-mode", "i", 2, 2, ";y;y", PinModeFunction, "PinModeFunction", NULL);
+    addUDFError = AddUDF(theEnv, "pin-mode", "iv", 2, 2, ";y;y", PinModeFunction, "PinModeFunction", NULL);
     if (addUDFError != AddUDFError::AUE_NO_ERROR)
     {
       Write(theEnv, "ArduninoInitFunction pin-mode: ");
@@ -141,6 +141,8 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
   Eval(theEnv, "(digital-write LED_GREEN HIGH)", NULL);
   Eval(theEnv, "(digital-write LED_BLUE HIGH)", NULL);
   // TODO: reset all pin related to existing instances
+  // gpio_dump_io_configuration() // gpio.c
+  // gpio_reset_pin // gpio.c
 
   Writeln(theEnv, "Arduino Nano ESP32 + CLIPS ready!");
 }
