@@ -149,5 +149,6 @@ static const int pinsLookupTableSize = sizeof(pinsLookupTable) / sizeof(pinsLook
 void DigitalReadFunction(Environment *, UDFContext *, UDFValue *);
 void DigitalWriteFunction(Environment *, UDFContext *, UDFValue *);
 void PinModeFunction(Environment *, UDFContext *, UDFValue *);
+void PinResetFunction(Environment *, UDFContext *, UDFValue *);
 
 #endif

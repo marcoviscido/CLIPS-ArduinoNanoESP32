@@ -118,17 +118,46 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
       return;
     }
   }
+  if (FindFunction(theEnv, "pin-reset") == NULL)
+  {
+    addUDFError = AddUDF(theEnv, "pin-reset", "iv", 1, 1, ";iny", PinResetFunction, "PinResetFunction", NULL);
+    if (addUDFError != AddUDFError::AUE_NO_ERROR)
+    {
+      Write(theEnv, "ArduninoInitFunction pin-reset: ");
+      WriteInteger(theEnv, STDOUT, addUDFError);
+      Writeln(theEnv, "");
+      return;
+    }
+  }
 
   BuildError buildError = BuildError::BE_NO_ERROR;
   if (FindDefclass(theEnv, "PIN") == NULL)
   {
     buildError = Build(theEnv, "(defclass PIN \"A generic Arduino GPIO pin.\" (is-a USER) (role concrete) (pattern-match reactive)"
-                               "   (slot value (access read-write) (type SYMBOL NUMBER))"
+                               "   (slot value (access read-write) (type SYMBOL NUMBER))" // (default nil) ?
                                "   (slot mode (access read-write) (type SYMBOL)(default nil)(allowed-symbols nil INPUT OUTPUT))"
-                               "   (message-handler get-value primary)"
-                               "   (message-handler set-value primary)"
-                               "   (message-handler get-mode primary)"
-                               "   (message-handler set-mode primary)"
+                               ")");
+    if (buildError != BuildError::BE_NO_ERROR)
+    {
+      Write(theEnv, "ArduninoInitFunction defclass-PIN: ");
+      WriteInteger(theEnv, STDOUT, buildError);
+      Writeln(theEnv, "");
+      return;
+    }
+
+    buildError = Build(theEnv, "(defmessage-handler PIN delete before ()"
+                               "     (pin-reset (instance-name ?self) )"
+                               ")");
+    if (buildError != BuildError::BE_NO_ERROR)
+    {
+      Write(theEnv, "ArduninoInitFunction defclass-PIN: ");
+      WriteInteger(theEnv, STDOUT, buildError);
+      Writeln(theEnv, "");
+      return;
+    }
+
+    buildError = Build(theEnv, "(defmessage-handler PIN print before ()"
+                               "     (digital-read (instance-name ?self) )"
                                ")");
     if (buildError != BuildError::BE_NO_ERROR)
     {
@@ -139,10 +168,7 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
     }
 
     buildError = Build(theEnv, "(defmessage-handler PIN get-value before ()"
-                               "  (if (= (str-compare INPUT ?self:mode) 0)"
-                               "     then"
                                "     (digital-read (instance-name ?self) )"
-                               "  )"
                                ")");
     if (buildError != BuildError::BE_NO_ERROR)
     {
@@ -152,10 +178,13 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
       return;
     }
 
-    buildError = Build(theEnv, "(defmessage-handler PIN set-value after (?value)"
+    buildError = Build(theEnv, "(defmessage-handler PIN put-value before (?value)"
                                "  (if (= (str-compare OUTPUT ?self:mode) 0)"
                                "     then"
                                "     (digital-write (instance-name ?self) ?value)"
+                               "     else"
+                               "     (digital-write (instance-name ?self) ?self:value)"
+                               "     (println \"Error: put-value is not a valid accessor for a PIN in INPUT mode.\")"
                                "  )"
                                ")");
     if (buildError != BuildError::BE_NO_ERROR)
@@ -173,7 +202,6 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
   Eval(theEnv, "(digital-write LED_RED HIGH)", NULL);
   Eval(theEnv, "(digital-write LED_GREEN HIGH)", NULL);
   Eval(theEnv, "(digital-write LED_BLUE HIGH)", NULL);
-  // TODO: reset all pin related to existing instances
   // gpio_dump_io_configuration() // gpio.c
   // gpio_reset_pin // gpio.c
 

@@ -94,15 +94,6 @@ void DigitalReadFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
   }
   else
   {
-    if (strcmp(modeSlot->lexemeValue->contents, "INPUT") != 0)
-    {
-      SetErrorValue(theEnv, theArg.header);
-      UDFInvalidArgumentMessage(context, "symbol that represents a pin with INPUT mode");
-      UDFThrowError(context);
-      genfree(theEnv, insdata, sizeof(CLIPSValue));
-      return;
-    }
-
     if (digitalRead(pin) != 0)
     {
       returnValue->lexemeValue = CreateSymbol(theEnv, "HIGH");
@@ -111,7 +102,17 @@ void DigitalReadFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
     {
       returnValue->lexemeValue = CreateSymbol(theEnv, "LOW");
     }
-    Send(theEnv, insdata, "put-value", returnValue->lexemeValue->contents, NULL);
+
+    CLIPSValue *newVal = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
+    newVal->lexemeValue = returnValue->lexemeValue;
+    PutSlotError putNewValErr = DirectPutSlot(insdata->instanceValue, "value", newVal);
+    genfree(theEnv, newVal, sizeof(CLIPSValue));
+    if (putNewValErr != PutSlotError::PSE_NO_ERROR)
+    {
+      Writeln(theEnv, "Something goes wrong with direct-put-value in digital-read");
+      UDFThrowError(context);
+      return;
+    }
   }
   genfree(theEnv, insdata, sizeof(CLIPSValue));
 }
@@ -192,12 +193,10 @@ void DigitalWriteFunction(Environment *theEnv, UDFContext *context, UDFValue *re
     if (stateArg != nullptr && strcmp(stateArg, "LOW") == 0)
     {
       digitalWrite(pin, LOW);
-      // Send(theEnv, insdata, "put-value", "LOW", NULL); // fatto sulla before put-value
     }
     else if (stateArg != nullptr && strcmp(stateArg, "HIGH") == 0)
     {
       digitalWrite(pin, HIGH);
-      // Send(theEnv, insdata, "put-value", "HIGH", NULL); // fatto sulla before put-value
     }
     else
     {
@@ -207,8 +206,6 @@ void DigitalWriteFunction(Environment *theEnv, UDFContext *context, UDFValue *re
   }
   genfree(theEnv, insdata, sizeof(CLIPSValue));
 }
-
-///////////////
 
 /**
  * Ex.: (pin-mode D5 OUTPUT)
@@ -405,5 +402,66 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
       return;
     }
   }
+  genfree(theEnv, insdata, sizeof(CLIPSValue));
+}
+
+void PinResetFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
+{
+  UDFValue theArg;
+  const char *pinArg = nullptr;
+
+  if (!UDFFirstArgument(context, INSTANCE_BITS | SYMBOL_BIT, &theArg))
+  {
+    return;
+  }
+
+  if (CVIsType(&theArg, SYMBOL_BIT | INSTANCE_NAME_BIT))
+  {
+    pinArg = theArg.lexemeValue->contents;
+  }
+  else if (CVIsType(&theArg, INSTANCE_ADDRESS_BIT))
+  {
+    pinArg = theArg.instanceValue->name->contents;
+  }
+
+  if (pinArg == nullptr)
+  {
+    SetErrorValue(theEnv, theArg.header);
+    UDFThrowError(context);
+    return;
+  }
+
+  int pin = getPinFromName(pinArg);
+  if (pin < 0)
+  {
+    SetErrorValue(theEnv, theArg.header);
+    UDFInvalidArgumentMessage(context, "symbol of a valid pin name");
+    UDFThrowError(context);
+    return;
+  }
+
+  CLIPSValue *insdata = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
+  insdata->instanceValue = FindInstance(theEnv, NULL, pinArg, true);
+  if (insdata->instanceValue != nullptr)
+  {
+    returnValue->instanceValue = insdata->instanceValue;
+  }
+
+  gpio_num_t gpioNum = static_cast<gpio_num_t>(pin);
+  if (gpioNum == GPIO_NUM_NC)
+  {
+    UDFInvalidArgumentMessage(context, "symbol of a valid pin name");
+    UDFThrowError(context);
+    return;
+  }
+
+  esp_err_t resetErr = gpio_reset_pin(gpioNum);
+  if (resetErr != ESP_OK)
+  {
+    Writeln(theEnv, "Something goes wrong with the IOMUX for this pin and the GPIO function.");
+    UDFThrowError(context);
+    return;
+  }
+
   genfree(theEnv, insdata, sizeof(CLIPSValue));
 }
