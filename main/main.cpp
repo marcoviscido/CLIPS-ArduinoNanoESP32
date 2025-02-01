@@ -156,6 +156,18 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
       return;
     }
 
+    // TODO:
+    // buildError = Build(theEnv, "(defmessage-handler PIN init after ()"
+    //                            "     (digital-read (instance-name ?self) )"
+    //                            ")");
+    // if (buildError != BuildError::BE_NO_ERROR)
+    // {
+    //   Write(theEnv, "ArduninoInitFunction defclass-PIN: ");
+    //   WriteInteger(theEnv, STDOUT, buildError);
+    //   Writeln(theEnv, "");
+    //   return;
+    // }
+
     buildError = Build(theEnv, "(defmessage-handler PIN print before ()"
                                "     (digital-read (instance-name ?self) )"
                                ")");

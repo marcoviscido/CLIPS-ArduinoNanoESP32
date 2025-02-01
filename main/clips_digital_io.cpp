@@ -43,6 +43,7 @@ void DigitalReadFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
 {
   UDFValue theArg;
   const char *pinArg = nullptr;
+  Instance *pinInstanceInInput = nullptr;
 
   if (!UDFFirstArgument(context, INSTANCE_BITS | SYMBOL_BIT, &theArg))
   {
@@ -55,6 +56,7 @@ void DigitalReadFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
   }
   else if (CVIsType(&theArg, INSTANCE_ADDRESS_BIT))
   {
+    pinInstanceInInput = theArg.instanceValue;
     pinArg = theArg.instanceValue->name->contents;
   }
 
@@ -75,7 +77,15 @@ void DigitalReadFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
   }
 
   CLIPSValue *insdata = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
-  insdata->instanceValue = FindInstance(theEnv, NULL, pinArg, true);
+  if (pinInstanceInInput != nullptr)
+  {
+    insdata->instanceValue = pinInstanceInInput;
+  }
+  else
+  {
+    insdata->instanceValue = FindInstance(theEnv, NULL, pinArg, true);
+  }
+
   if (insdata->instanceValue == nullptr)
   {
     SetErrorValue(theEnv, theArg.header);
@@ -122,6 +132,7 @@ void DigitalWriteFunction(Environment *theEnv, UDFContext *context, UDFValue *re
   UDFValue nextPossible;
   const char *pinArg = nullptr;
   const char *stateArg;
+  Instance *pinInstanceInInput = nullptr;
 
   if (!UDFNthArgument(context, 1, INSTANCE_BITS | SYMBOL_BIT, &nextPossible))
   {
@@ -134,6 +145,7 @@ void DigitalWriteFunction(Environment *theEnv, UDFContext *context, UDFValue *re
   }
   else if (CVIsType(&nextPossible, INSTANCE_ADDRESS_BIT))
   {
+    pinInstanceInInput = nextPossible.instanceValue;
     pinArg = nextPossible.instanceValue->name->contents;
   }
 
@@ -165,7 +177,15 @@ void DigitalWriteFunction(Environment *theEnv, UDFContext *context, UDFValue *re
   }
 
   CLIPSValue *insdata = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
-  insdata->instanceValue = FindInstance(theEnv, NULL, pinArg, true);
+  if (pinInstanceInInput != nullptr)
+  {
+    insdata->instanceValue = pinInstanceInInput;
+  }
+  else
+  {
+    insdata->instanceValue = FindInstance(theEnv, NULL, pinArg, true);
+  }
+
   if (insdata->instanceValue == nullptr)
   {
     UDFInvalidArgumentMessage(context, "symbol with the name of an already registered pin");
@@ -254,6 +274,7 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
   // SE NON ESISTE ISTANZA PER IL PIN INDICATO ALLORA LA CREO E RITORNO
   CLIPSValue *insdata = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
   returnValue->instanceValue = FindInstance(theEnv, NULL, pinArg, true);
+
   if (returnValue->instanceValue == nullptr)
   {
     genfree(theEnv, insdata, sizeof(CLIPSValue));
@@ -409,6 +430,7 @@ void PinResetFunction(Environment *theEnv, UDFContext *context, UDFValue *return
 {
   UDFValue theArg;
   const char *pinArg = nullptr;
+  Instance *pinInstanceInInput = nullptr;
 
   if (!UDFFirstArgument(context, INSTANCE_BITS | SYMBOL_BIT, &theArg))
   {
@@ -421,6 +443,7 @@ void PinResetFunction(Environment *theEnv, UDFContext *context, UDFValue *return
   }
   else if (CVIsType(&theArg, INSTANCE_ADDRESS_BIT))
   {
+    pinInstanceInInput = theArg.instanceValue;
     pinArg = theArg.instanceValue->name->contents;
   }
 
@@ -441,7 +464,15 @@ void PinResetFunction(Environment *theEnv, UDFContext *context, UDFValue *return
   }
 
   CLIPSValue *insdata = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
-  insdata->instanceValue = FindInstance(theEnv, NULL, pinArg, true);
+  if (pinInstanceInInput != nullptr)
+  {
+    insdata->instanceValue = pinInstanceInInput;
+  }
+  else
+  {
+    insdata->instanceValue = FindInstance(theEnv, NULL, pinArg, true);
+  }
+
   if (insdata->instanceValue != nullptr)
   {
     returnValue->instanceValue = insdata->instanceValue;
