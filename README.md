@@ -34,3 +34,35 @@ This project is a software porting, a mapping of the Read-Eval-Print Loop with t
 > This project is a prototype and is still under development. While it works, it has not been thoroughly tested and may not be stable. **Not recommended for production use.**
 
 > All elements, parts, libraries, interfaces, code snippets, tools, and components used in this software are protected by their respective original copyrights; this also applies to the CLIPS software.
+
+# Arduino COOL functions
+
+- [pin-mode](https://docs.arduino.cc/language-reference/en/functions/digital-io/pinMode/)
+
+    `(pin-mode D5 INPUT_PULLUP)`
+
+    An instance of the class PIN will be created;
+
+- pin-reset
+
+    `(pin-reset D5)`
+
+    The instance will be deleted;
+
+- [digital-read](https://docs.arduino.cc/language-reference/en/functions/digital-io/digitalread/)
+
+    `(digital-read D5)`
+
+- [digital-write](https://docs.arduino.cc/language-reference/en/functions/digital-io/digitalwrite/)
+
+    `(digital-write D5 HIGH)`
+
+- [wifi-status](https://docs.arduino.cc/libraries/wifi/#%60WiFi.status()%60)
+
+    `(wifi-status)`
+
+- wifi-connect
+
+    `(wifi-connect <ssid> <password>)`
+
+    It wraps https://docs.arduino.cc/libraries/wifi/#%60WiFi.begin()%60
