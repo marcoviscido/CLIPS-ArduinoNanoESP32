@@ -150,5 +150,6 @@ void DigitalReadFunction(Environment *, UDFContext *, UDFValue *);
 void DigitalWriteFunction(Environment *, UDFContext *, UDFValue *);
 void PinModeFunction(Environment *, UDFContext *, UDFValue *);
 void PinResetFunction(Environment *, UDFContext *, UDFValue *);
+void SyncPinStateFunction(Environment *, void *);
 
 #endif

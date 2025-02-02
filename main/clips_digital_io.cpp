@@ -300,10 +300,12 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
       return;
     }
 
+    bool isModeInput = false;
     if (modeArg != nullptr && strcmp(modeArg, "INPUT") == 0)
     {
       pinMode(pin, INPUT);
       makeInstCmd += "INPUT";
+      isModeInput = true;
     }
     else if (modeArg != nullptr && strcmp(modeArg, "OUTPUT") == 0)
     {
@@ -319,6 +321,7 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
     {
       pinMode(pin, INPUT_PULLUP);
       makeInstCmd += "INPUT";
+      isModeInput = true;
     }
     else if (modeArg != nullptr && strcmp(modeArg, "PULLDOWN") == 0)
     {
@@ -329,11 +332,13 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
     {
       pinMode(pin, INPUT_PULLDOWN);
       makeInstCmd += "INPUT";
+      isModeInput = true;
     }
     else if (modeArg != nullptr && strcmp(modeArg, "OPEN_DRAIN") == 0)
     {
       pinMode(pin, OPEN_DRAIN);
       makeInstCmd += "INPUT";
+      isModeInput = true;
     }
     else if (modeArg != nullptr && strcmp(modeArg, "OUTPUT_OPEN_DRAIN") == 0)
     {
@@ -351,6 +356,14 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
     makeInstCmd += "))";
     returnValue->instanceValue = MakeInstance(theEnv, makeInstCmd.c_str()); // todo: Definstances?
     // todo: gpio_dump_io_configuration(buffer, pin); parse(buffer); ...
+
+    if (isModeInput)
+    {
+      String funcName = "sync-pin-state-";
+      funcName += pinArg;
+      AddPeriodicFunction(theEnv, funcName.c_str(), SyncPinStateFunction, 2500, returnValue->instanceValue);
+    }
+
     return;
   }
 
@@ -486,13 +499,84 @@ void PinResetFunction(Environment *theEnv, UDFContext *context, UDFValue *return
     return;
   }
 
-  esp_err_t resetErr = gpio_reset_pin(gpioNum);
-  if (resetErr != ESP_OK)
+  bool removePeriodicFunc = false;
+  if (insdata->instanceValue != nullptr)
   {
-    Writeln(theEnv, "Something goes wrong with the IOMUX for this pin and the GPIO function.");
-    UDFThrowError(context);
+    CLIPSValue *insMode = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
+    GetSlotError gse = DirectGetSlot(returnValue->instanceValue, "mode", insMode);
+    if (gse == GetSlotError::GSE_NO_ERROR)
+    {
+      removePeriodicFunc = strcmp(insMode->lexemeValue->contents, "INPUT") == 0;
+    }
+    genfree(theEnv, insMode, sizeof(CLIPSValue));
+  }
+  else
+  {
+    esp_err_t resetErr = gpio_reset_pin(gpioNum);
+    if (resetErr != ESP_OK)
+    {
+      Writeln(theEnv, "Something goes wrong with the IOMUX for this pin and the GPIO function.");
+      UDFThrowError(context);
+      return;
+    }
+    genfree(theEnv, insdata, sizeof(CLIPSValue));
     return;
   }
 
+  if (removePeriodicFunc)
+  {
+    String funcName = "sync-pin-state-";
+    funcName += pinArg;
+    if (RemovePeriodicFunction(theEnv, funcName.c_str()))
+    {
+      esp_err_t resetErr = gpio_reset_pin(gpioNum);
+      if (resetErr != ESP_OK)
+      {
+        Writeln(theEnv, "Something goes wrong with the IOMUX for this pin and the GPIO function.");
+        UDFThrowError(context);
+        return;
+      }
+    }
+  }
+  else
+  {
+    esp_err_t resetErr = gpio_reset_pin(gpioNum);
+    if (resetErr != ESP_OK)
+    {
+      Writeln(theEnv, "Something goes wrong with the IOMUX for this pin and the GPIO function.");
+      UDFThrowError(context);
+      return;
+    }
+  }
+
   genfree(theEnv, insdata, sizeof(CLIPSValue));
+}
+
+void SyncPinStateFunction(Environment *theEnv, void *context)
+{
+  const char *pinArg;
+  Instance *pinInstance = (Instance *)context;
+  if (pinInstance == nullptr)
+  {
+    return;
+  }
+
+  pinArg = pinInstance->name->contents;
+  int pin = getPinFromName(pinArg);
+
+  CLIPSValue *newVal = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
+  if (digitalRead(pin) != 0)
+  {
+    newVal->lexemeValue = CreateSymbol(theEnv, "HIGH");
+  }
+  else
+  {
+    newVal->lexemeValue = CreateSymbol(theEnv, "LOW");
+  }
+  PutSlotError putNewValErr = DirectPutSlot(pinInstance, "value", newVal);
+  genfree(theEnv, newVal, sizeof(CLIPSValue));
+  if (putNewValErr != PutSlotError::PSE_NO_ERROR)
+  {
+    Writeln(theEnv, "Something goes wrong with direct-put-value in SyncPinStateFunction");
+  }
 }

@@ -268,6 +268,7 @@ void setup()
   mainEnv = CreateEnvironment();
   UtilityData(mainEnv)->YieldTimeFunction = yield; // esp32-hal.h
   EnableYieldFunction(mainEnv, true);
+  EnablePeriodicFunctions(mainEnv, true);
 
   AddRouter(mainEnv,
             "trace",            /* Router name */
