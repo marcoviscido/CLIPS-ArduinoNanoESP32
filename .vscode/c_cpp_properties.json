@@ -2,7 +2,6 @@
     "configurations": [
         {
             "name": "Win32",
-
             "defines": [
                 "_DEBUG",
                 "UNICODE",
@@ -16,9 +15,12 @@
             "includePath": [
                 "${config:idf.espIdfPath}/components/**",
                 "${config:idf.espIdfPathWin}/components/**",
-                "${workspaceFolder}/**"
-                ],
-                "compileCommands": "${workspaceFolder}/build/compile_commands.json"
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/managed_components/espressif__arduino-esp32/libraries/WiFi/src"
+            ],
+            "compileCommands": [
+                "${workspaceFolder}/build/compile_commands.json"
+            ]
         }
     ],
     "version": 4

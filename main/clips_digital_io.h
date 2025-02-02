@@ -28,6 +28,9 @@
 
 #define _H_CLIPS_DIGITAL_IO_H
 
+#include "Arduino.h"
+#include "clips.h"
+
 struct KeyValue
 {
     const char *key;

@@ -40,8 +40,13 @@
  */
 
 #include "Arduino.h"
+#include <WiFi.h>
+#include <PubSubClient.h>
+
 #include "clips.h"
 #include "clips_digital_io.h"
+#include "clips_wifi.h"
+
 
 bool stringComplete = false;
 static Environment *mainEnv;
@@ -124,6 +129,28 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
     if (addUDFError != AddUDFError::AUE_NO_ERROR)
     {
       Write(theEnv, "ArduninoInitFunction pin-reset: ");
+      WriteInteger(theEnv, STDOUT, addUDFError);
+      Writeln(theEnv, "");
+      return;
+    }
+  }
+  if (FindFunction(theEnv, "wifi-connect") == NULL)
+  {
+    addUDFError = AddUDF(theEnv, "wifi-connect", "vs", 2, 2, ";s;s", WifiConnectFunction, "WifiConnectFunction", NULL);
+    if (addUDFError != AddUDFError::AUE_NO_ERROR)
+    {
+      Write(theEnv, "ArduninoInitFunction wifi-connect: ");
+      WriteInteger(theEnv, STDOUT, addUDFError);
+      Writeln(theEnv, "");
+      return;
+    }
+  }
+  if (FindFunction(theEnv, "wifi-status") == NULL)
+  {
+    addUDFError = AddUDF(theEnv, "wifi-status", "v", 0, 0, "*", WifiStatusFunction, "WifiStatusFunction", NULL);
+    if (addUDFError != AddUDFError::AUE_NO_ERROR)
+    {
+      Write(theEnv, "ArduninoInitFunction wifi-status: ");
       WriteInteger(theEnv, STDOUT, addUDFError);
       Writeln(theEnv, "");
       return;
