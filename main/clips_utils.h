@@ -22,20 +22,24 @@
  * SOFTWARE.
  */
 
-#ifndef _H_CLIPS_WIFI_H
+#ifndef _H_CLIPS_UTILS_H
 
 #pragma once
 
-#define _H_CLIPS_WIFI_H
+#define _H_CLIPS_UTILS_H
 
 #include "Arduino.h"
 #include "clips.h"
 
-void printCurrentNet();
-void printWifiData();
-void WifiBeginFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue);
-void WifiStatusFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue);
-void WifiDisconnectFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue);
-void WifiScanNetworksFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue);
+AddUDFError AddUDFIfNotExists(
+    Environment *theEnv,
+    const char *clipsFunctionName,
+    const char *returnTypes,
+    unsigned short minArgs,
+    unsigned short maxArgs,
+    const char *argumentTypes,
+    UserDefinedFunction *cFunctionPointer,
+    const char *cFunctionName,
+    void *context);
 
 #endif

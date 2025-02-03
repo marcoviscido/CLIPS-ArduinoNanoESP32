@@ -22,20 +22,34 @@
  * SOFTWARE.
  */
 
-#ifndef _H_CLIPS_WIFI_H
-
-#pragma once
-
-#define _H_CLIPS_WIFI_H
-
 #include "Arduino.h"
 #include "clips.h"
 
-void printCurrentNet();
-void printWifiData();
-void WifiBeginFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue);
-void WifiStatusFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue);
-void WifiDisconnectFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue);
-void WifiScanNetworksFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue);
+#include "clips_utils.h"
 
-#endif
+AddUDFError AddUDFIfNotExists(
+    Environment *theEnv,
+    const char *clipsFunctionName,
+    const char *returnTypes,
+    unsigned short minArgs,
+    unsigned short maxArgs,
+    const char *argumentTypes,
+    UserDefinedFunction *cFunctionPointer,
+    const char *cFunctionName,
+    void *context)
+{
+    AddUDFError addUDFError = AddUDFError::AUE_NO_ERROR;
+    if (FindFunction(theEnv, clipsFunctionName) == NULL)
+    {
+        addUDFError = AddUDF(theEnv, clipsFunctionName, returnTypes, minArgs, maxArgs, argumentTypes, cFunctionPointer, cFunctionName, context);
+        if (addUDFError != AddUDFError::AUE_NO_ERROR)
+        {
+            ESP_LOGE("ArduninoInitFunction", "Error adding %s - %i", clipsFunctionName, (int8_t)addUDFError);
+        }
+        else
+        {
+            ESP_LOGI("ArduninoInitFunction", "Function %s added", clipsFunctionName);
+        }
+    }
+    return addUDFError;
+}

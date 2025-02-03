@@ -40,13 +40,13 @@
  */
 
 #include "Arduino.h"
-#include <WiFi.h>
-#include <PubSubClient.h>
+#include "WiFi.h" // TODO: https://github.com/espressif/esp-idf/blob/v5.4/examples/protocols/sntp/README.md
+#include "PubSubClient.h" // TODO: https://www.emqx.com/en/blog/esp32-connects-to-the-free-public-mqtt-broker
 
 #include "clips.h"
+#include "clips_utils.h"
 #include "clips_digital_io.h"
 #include "clips_wifi.h"
-
 
 bool stringComplete = false;
 static Environment *mainEnv;
@@ -79,7 +79,7 @@ static void WriteTraceCallback(
   {
     if (!str)
     {
-      Serial.println("Error: Null str pointer!");
+      ESP_LOGE("WriteTraceCallback", "Error: Null str pointer!");
       return;
     }
 
@@ -90,72 +90,30 @@ static void WriteTraceCallback(
 void ArduninoInitFunction(Environment *theEnv, void *context)
 {
   AddUDFError addUDFError = AddUDFError::AUE_NO_ERROR;
-  if (FindFunction(theEnv, "digital-read") == NULL)
+  addUDFError = AddUDFIfNotExists(theEnv, "digital-read", "y", 1, 1, ";iny", DigitalReadFunction, "DigitalReadFunction", NULL);
+  if (addUDFError != AddUDFError::AUE_NO_ERROR)
   {
-    addUDFError = AddUDF(theEnv, "digital-read", "y", 1, 1, ";iny", DigitalReadFunction, "DigitalReadFunction", NULL);
-    if (addUDFError != AddUDFError::AUE_NO_ERROR)
-    {
-      Write(theEnv, "ArduninoInitFunction digital-read: ");
-      WriteInteger(theEnv, STDOUT, addUDFError);
-      Writeln(theEnv, "");
-      return;
-    }
+    return;
   }
-  if (FindFunction(theEnv, "digital-write") == NULL)
+  addUDFError = AddUDFIfNotExists(theEnv, "digital-write", "v", 2, 2, ";iny;y", DigitalWriteFunction, "DigitalWriteFunction", NULL);
+  if (addUDFError != AddUDFError::AUE_NO_ERROR)
   {
-    addUDFError = AddUDF(theEnv, "digital-write", "v", 2, 2, ";iny;y", DigitalWriteFunction, "DigitalWriteFunction", NULL);
-    if (addUDFError != AddUDFError::AUE_NO_ERROR)
-    {
-      Write(theEnv, "ArduninoInitFunction digital-write: ");
-      WriteInteger(theEnv, STDOUT, addUDFError);
-      Writeln(theEnv, "");
-      return;
-    }
+    return;
   }
-  if (FindFunction(theEnv, "pin-mode") == NULL)
+  addUDFError = AddUDFIfNotExists(theEnv, "pin-mode", "iv", 2, 2, ";y;y", PinModeFunction, "PinModeFunction", NULL);
+  if (addUDFError != AddUDFError::AUE_NO_ERROR)
   {
-    addUDFError = AddUDF(theEnv, "pin-mode", "iv", 2, 2, ";y;y", PinModeFunction, "PinModeFunction", NULL);
-    if (addUDFError != AddUDFError::AUE_NO_ERROR)
-    {
-      Write(theEnv, "ArduninoInitFunction pin-mode: ");
-      WriteInteger(theEnv, STDOUT, addUDFError);
-      Writeln(theEnv, "");
-      return;
-    }
+    return;
   }
-  if (FindFunction(theEnv, "pin-reset") == NULL)
+  addUDFError = AddUDFIfNotExists(theEnv, "pin-reset", "iv", 1, 1, ";iny", PinResetFunction, "PinResetFunction", NULL);
+  if (addUDFError != AddUDFError::AUE_NO_ERROR)
   {
-    addUDFError = AddUDF(theEnv, "pin-reset", "iv", 1, 1, ";iny", PinResetFunction, "PinResetFunction", NULL);
-    if (addUDFError != AddUDFError::AUE_NO_ERROR)
-    {
-      Write(theEnv, "ArduninoInitFunction pin-reset: ");
-      WriteInteger(theEnv, STDOUT, addUDFError);
-      Writeln(theEnv, "");
-      return;
-    }
+    return;
   }
-  if (FindFunction(theEnv, "wifi-connect") == NULL)
-  {
-    addUDFError = AddUDF(theEnv, "wifi-connect", "vs", 2, 2, ";s;s", WifiConnectFunction, "WifiConnectFunction", NULL);
-    if (addUDFError != AddUDFError::AUE_NO_ERROR)
-    {
-      Write(theEnv, "ArduninoInitFunction wifi-connect: ");
-      WriteInteger(theEnv, STDOUT, addUDFError);
-      Writeln(theEnv, "");
-      return;
-    }
-  }
-  if (FindFunction(theEnv, "wifi-status") == NULL)
-  {
-    addUDFError = AddUDF(theEnv, "wifi-status", "v", 0, 0, "*", WifiStatusFunction, "WifiStatusFunction", NULL);
-    if (addUDFError != AddUDFError::AUE_NO_ERROR)
-    {
-      Write(theEnv, "ArduninoInitFunction wifi-status: ");
-      WriteInteger(theEnv, STDOUT, addUDFError);
-      Writeln(theEnv, "");
-      return;
-    }
-  }
+  addUDFError = AddUDFIfNotExists(theEnv, "wifi-begin", "vs", 2, 2, ";s;s", WifiBeginFunction, "WifiBeginFunction", NULL);
+  addUDFError = AddUDFIfNotExists(theEnv, "wifi-status", "v", 0, 0, "*", WifiStatusFunction, "WifiStatusFunction", NULL);
+  addUDFError = AddUDFIfNotExists(theEnv, "wifi-disconnect", "v", 0, 0, "*", WifiDisconnectFunction, "WifiDisconnectFunction", NULL);
+  addUDFError = AddUDFIfNotExists(theEnv, "wifi-scan", "v", 0, 0, "*", WifiScanNetworksFunction, "WifiScanNetworksFunction", NULL);
 
   BuildError buildError = BuildError::BE_NO_ERROR;
   if (FindDefclass(theEnv, "PIN") == NULL)
@@ -166,9 +124,7 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
                                ")");
     if (buildError != BuildError::BE_NO_ERROR)
     {
-      Write(theEnv, "ArduninoInitFunction defclass-PIN: ");
-      WriteInteger(theEnv, STDOUT, buildError);
-      Writeln(theEnv, "");
+      ESP_LOGE("ArduninoInitFunction", "Error adding %s - %i", "defclass-PIN", (int8_t)buildError);
       return;
     }
 
@@ -177,13 +133,11 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
                                ")");
     if (buildError != BuildError::BE_NO_ERROR)
     {
-      Write(theEnv, "ArduninoInitFunction defclass-PIN: ");
-      WriteInteger(theEnv, STDOUT, buildError);
-      Writeln(theEnv, "");
+      ESP_LOGE("ArduninoInitFunction", "Error adding %s - %i", "defmessage-handler PIN delete before", (int8_t)buildError);
       return;
     }
 
-    // TODO:
+    // TODO: init instance state/value
     // buildError = Build(theEnv, "(defmessage-handler PIN init after ()"
     //                            "     (digital-read (instance-name ?self) )"
     //                            ")");
@@ -200,9 +154,7 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
                                ")");
     if (buildError != BuildError::BE_NO_ERROR)
     {
-      Write(theEnv, "ArduninoInitFunction defclass-PIN: ");
-      WriteInteger(theEnv, STDOUT, buildError);
-      Writeln(theEnv, "");
+      ESP_LOGE("ArduninoInitFunction", "Error adding %s - %i", "defmessage-handler PIN print before", (int8_t)buildError);
       return;
     }
 
@@ -211,9 +163,7 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
                                ")");
     if (buildError != BuildError::BE_NO_ERROR)
     {
-      Write(theEnv, "ArduninoInitFunction defclass-PIN: ");
-      WriteInteger(theEnv, STDOUT, buildError);
-      Writeln(theEnv, "");
+      ESP_LOGE("ArduninoInitFunction", "Error adding %s - %i", "defmessage-handler PIN get-value before", (int8_t)buildError);
       return;
     }
 
@@ -228,9 +178,7 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
                                ")");
     if (buildError != BuildError::BE_NO_ERROR)
     {
-      Write(theEnv, "ArduninoInitFunction defclass-PIN: ");
-      WriteInteger(theEnv, STDOUT, buildError);
-      Writeln(theEnv, "");
+      ESP_LOGE("ArduninoInitFunction", "Error adding %s - %i", "defmessage-handler PIN put-value before", (int8_t)buildError);
       return;
     }
   }
@@ -244,11 +192,13 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
   // gpio_dump_io_configuration() // gpio.c
   // gpio_reset_pin // gpio.c
 
+  ESP_LOGI("ArduninoInitFunction", "Arduino Nano ESP32 + CLIPS ready!");
   Writeln(theEnv, "Arduino Nano ESP32 + CLIPS ready!");
 }
 
 void setup()
 {
+  ESP_LOGI("Setup", "Starting CLIPS-ArduinoNanoESP32...");
   pinMode(LED_RED, OUTPUT);
   pinMode(LED_GREEN, OUTPUT);
   pinMode(LED_BLUE, OUTPUT);
@@ -264,25 +214,17 @@ void setup()
   while (!Serial)
   {
     delay(100);
+    ESP_LOGI("Setup", "Waiting Serial...");
   }
-  Serial.println("\r\nStarting...\r\n");
 
   if (!psramFound())
   {
-    Serial.println(F("PSRAM not available!"));
-    digitalWrite(LED_RED, LOW); // reverse logic
+    ESP_LOGE("Setup", "PSRAM not available!");
     delay(2000);
     return;
   }
 
-  // TODO: https://github.com/espressif/esp-idf/blob/v5.4/examples/protocols/sntp/README.md
-
 #if DEBUGGING_FUNCTIONS
-// TODO: wdt disabled!!!
-// rtc_wdt_protect_off();
-// rtc_wdt_disable();
-// esp_task_wdt_delete(NULL);
-
 // Serial.println("CPU0 reset reason:");
 // print_reset_reason(rtc_get_reset_reason(0));
 // verbose_print_reset_reason(rtc_get_reset_reason(0));
@@ -293,9 +235,11 @@ void setup()
 #endif
 
   mainEnv = CreateEnvironment();
-  UtilityData(mainEnv)->YieldTimeFunction = yield; // esp32-hal.h
-  EnableYieldFunction(mainEnv, true);
   EnablePeriodicFunctions(mainEnv, true);
+
+  // TODO: task wdt CPU1 disabled!!!
+  // UtilityData(mainEnv)->YieldTimeFunction = yield; // esp32-hal.h
+  // EnableYieldFunction(mainEnv, true);
 
   AddRouter(mainEnv,
             "trace",            /* Router name */
@@ -322,7 +266,7 @@ void setup()
   RouterData(mainEnv)->InputUngets = 0;
   RouterData(mainEnv)->AwaitingInput = true;
 
-  AddStartingFunction(mainEnv, "arduino-init", ArduninoInitFunction, 2001, NULL);
+  AddStartingFunction(mainEnv, "arduino-init", ArduninoInitFunction, 2010, NULL);
 
   Reset(mainEnv);
   Writeln(mainEnv, "");
