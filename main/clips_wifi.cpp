@@ -31,31 +31,66 @@
 void WifiBeginFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue)
 {
     UDFValue theSsid, thePwd;
+    const char *ssid = nullptr, *pwd = nullptr;
 
-    if (!UDFFirstArgument(context, STRING_BIT, &theSsid))
+    uint8_t argsCount = UDFArgumentCount(context);
+    if (argsCount == 1)
     {
-        return;
+        if (!UDFFirstArgument(context, INSTANCE_ADDRESS_BIT, &theSsid))
+        {
+            return;
+        }
+        if (theSsid.instanceValue == nullptr)
+        {
+            SetErrorValue(theEnv, theSsid.header);
+            UDFThrowError(context);
+            return;
+        }
+        Instance *theInstance = theSsid.instanceValue;
+        if (strcmp(theInstance->cls->header.name->contents, "WIFI") != 0)
+        {
+            Writeln(theEnv, "The instance type is not valid");
+            UDFThrowError(context);
+            return;
+        }
+        CLIPSValue *ssidCv = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
+        CLIPSValue *pwdCv = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
+        DirectGetSlot(theInstance, "ssid", ssidCv);
+        DirectGetSlot(theInstance, "pwd", pwdCv);
+        ssid = ssidCv->lexemeValue->contents;
+        pwd = pwdCv->lexemeValue->contents;
+        genfree(theEnv, ssidCv, sizeof(CLIPSValue));
+        genfree(theEnv, pwdCv, sizeof(CLIPSValue));
     }
-    if (theSsid.lexemeValue->contents == nullptr)
+    else if (argsCount == 2)
     {
-        SetErrorValue(theEnv, theSsid.header);
-        UDFThrowError(context);
-        return;
+        if (!UDFFirstArgument(context, STRING_BIT, &theSsid))
+        {
+            return;
+        }
+        if (theSsid.lexemeValue->contents == nullptr)
+        {
+            SetErrorValue(theEnv, theSsid.header);
+            UDFThrowError(context);
+            return;
+        }
+        ssid = theSsid.lexemeValue->contents;
+
+        if (!UDFNthArgument(context, 2, STRING_BIT, &thePwd))
+        {
+            return;
+        }
+        if (thePwd.lexemeValue->contents == nullptr)
+        {
+            SetErrorValue(theEnv, thePwd.header);
+            UDFThrowError(context);
+            return;
+        }
+        pwd = thePwd.lexemeValue->contents;
     }
 
-    if (!UDFNthArgument(context, 2, STRING_BIT, &thePwd))
-    {
-        return;
-    }
-    if (thePwd.lexemeValue->contents == nullptr)
-    {
-        SetErrorValue(theEnv, thePwd.header);
-        UDFThrowError(context);
-        return;
-    }
-
-    int attempt = 10;
-    WiFi.begin(theSsid.lexemeValue->contents, thePwd.lexemeValue->contents);
+    uint8_t attempt = 10;
+    WiFi.begin(ssid, pwd);
     while (WiFi.status() != WL_CONNECTED && attempt != 0)
     {
         delay(2000);
@@ -66,7 +101,7 @@ void WifiBeginFunction(Environment *theEnv, UDFContext *context, UDFValue *retur
     if (WiFi.status() != WL_CONNECTED && attempt <= 0)
     {
         Write(theEnv, "Unable to connect to SSID: ");
-        Writeln(theEnv, theSsid.lexemeValue->contents);
+        Writeln(theEnv, ssid);
         return;
     }
 
