@@ -28,11 +28,11 @@
 
 #define _H_MAIN
 
-#include "Arduino.h"
 #include "clips.h"
 
-void mqttCallback(char *topic, byte *payload, unsigned int length);
-void connectMqtt(Environment *theEnv);
+void PubSubClientLoopFunction(Environment *theEnv, void *context);
 void ArduninoInitFunction(Environment *theEnv, void *context);
+void MqttCallbackFunction(char *topic, byte *payload, unsigned int length);
+void MqttConnectFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue);
 
 #endif
