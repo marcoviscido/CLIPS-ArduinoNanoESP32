@@ -462,12 +462,12 @@ void MqttConnectFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
   helloDoc["src"] = client_id;
   helloDoc["dst"] = "ALL";
   helloDoc["msg"] = "hello!";
-  size_t docSize = measureJson(helloDoc);
+  size_t docSize = measureJson(helloDoc) + 1;
 
   char *output = (char *)genalloc(theEnv, docSize);
   serializeJson(helloDoc, output, docSize);
 
-  psClient.publish(mqtt_topic, output, docSize);
+  psClient.publish(mqtt_topic, output, strlen(output));
   genfree(theEnv, output, docSize);
 
   if (psClient.subscribe(mqtt_topic))
