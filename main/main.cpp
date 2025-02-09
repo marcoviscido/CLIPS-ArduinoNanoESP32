@@ -630,10 +630,10 @@ void MqttCallbackFunction(char *topic, byte *payload, unsigned int length)
     }
   }
 
-  ESP_LOGI("MqttCallbackFunction", "Message arrived in topic: %s", topic);
-  ESP_LOGI("MqttCallbackFunction", "Message: %s", buffer.c_str());
-  ESP_LOGI("MqttCallbackFunction", "");
-  ESP_LOGI("MqttCallbackFunction", "-----------------------");
+  ESP_LOGV("MqttCallbackFunction", "");
+  ESP_LOGV("MqttCallbackFunction", "Message arrived in topic: %s", topic);
+  ESP_LOGV("MqttCallbackFunction", "Message: %s", buffer.c_str());
+  ESP_LOGV("MqttCallbackFunction", "-----------------------");
 
   // TODO: not safe
   while (stringInEdit)
@@ -655,15 +655,22 @@ void MqttCallbackFunction(char *topic, byte *payload, unsigned int length)
   String msg = doc["msg"];
   String msgId = doc["msg_id"];
 
-  ESP_LOGI("MqttCallbackFunction", "Evaluate message from %s -> %s", src.c_str(), dst.c_str());
-  ESP_LOGI("MqttCallbackFunction", "msg_id: %s", msgId.c_str());
-  ESP_LOGI("MqttCallbackFunction", "");
-  ESP_LOGI("MqttCallbackFunction", "%s", msg.c_str());
-  ESP_LOGI("MqttCallbackFunction", "");
+  ESP_LOGV("MqttCallbackFunction", "Evaluate message from %s -> %s", src.c_str(), dst.c_str());
+  ESP_LOGV("MqttCallbackFunction", "msg_id: %s", msgId.c_str());
+  ESP_LOGV("MqttCallbackFunction", "");
+  ESP_LOGV("MqttCallbackFunction", "%s", msg.c_str());
+  ESP_LOGV("MqttCallbackFunction", "");
 
   if (src.length() == 0 || dst.length() == 0 || msg.length() == 0 || msgId.length() == 0)
   {
     ESP_LOGE("MqttCallbackFunction", "THE MESSAGE IS NOT VALID");
+    callbackRunning = false;
+    return;
+  }
+
+  if (!(strcmp(mqtt_clientId, dst.c_str()) == 0 || strcmp("ALL", dst.c_str()) == 0))
+  {
+    ESP_LOGW("MqttCallbackFunction", "THE MESSAGE IS NOT FOR ME");
     callbackRunning = false;
     return;
   }
@@ -684,6 +691,16 @@ void MqttCallbackFunction(char *topic, byte *payload, unsigned int length)
     Write(mainEnv, GetCommandString(mainEnv));
     Writeln(mainEnv, "");
     PrintPrompt(mainEnv);
+
+    // // TODO: gestione reply
+    // if (reply == false)
+    // {
+    //   if (!ExecuteIfCommandComplete(mainEnv))
+    //   {
+    //     ESP_LOGE("MqttCallbackFunction", "The command was not complete or the command contains an error.");
+    //   }
+    //   callbackRunning = false;
+    // }
 
     MqttRouterData *mqttRouterData = (MqttRouterData *)genalloc(mainEnv, sizeof(MqttRouterData));
     mqttRouterData->mqttInstance = mqttInstance;
@@ -709,21 +726,6 @@ void MqttCallbackFunction(char *topic, byte *payload, unsigned int length)
     DeactivateRouter(mainEnv, "mqtt");
     DeleteRouter(mainEnv, "mqtt");
     genfree(mainEnv, mqttRouterData, sizeof(MqttRouterData));
-
-    // CLIPSValue *evalResults = (CLIPSValue *)genalloc(mainEnv, sizeof(CLIPSValue));
-    // EvalError evalError = Eval(mainEnv, msg.c_str(), evalResults);
-    // if (evalError == EvalError::EE_PARSING_ERROR)
-    // {
-    //   ESP_LOGE("MqttCallbackFunction", "A syntax error was encountered while parsing.");
-    // }
-    // else if (evalError == EvalError::EE_PROCESSING_ERROR)
-    // {
-    //   ESP_LOGE("MqttCallbackFunction", "An error occurred while executing the parsed expression.");
-    // }
-
-    // WriteCLIPSValue(mainEnv, STDOUT, evalResults);
-    // Writeln(mainEnv, "");
-    // genfree(mainEnv, evalResults, sizeof(CLIPSValue));
   }
   callbackRunning = false;
 }

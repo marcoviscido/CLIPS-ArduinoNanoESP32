@@ -121,7 +121,25 @@ These functions offer the ability to interact with the underlying functions of t
         )
 
     (mqtt-connect [mqtt])
+    ```
+
+    A subscription to the topic has been registered and this message will be sent to the broker:
+
+    ```
+    {
+      "src": "clips-esp32-<WIFI-MAC-ADDRESS>",
+      "dst": "ALL",
+      "msg_id": "<UUID-string>",
+      "msg": "hello!"
+    }
+    ```
+
+    CLIPS will respond to messages sent to it with the results of the command received is msg.
+
     (send [mqtt] get-clientid)
+
+    ```
+    "clips-esp32-<WIFI-MAC-ADDRESS>"
     ```
 
 - mqtt-disconnect
