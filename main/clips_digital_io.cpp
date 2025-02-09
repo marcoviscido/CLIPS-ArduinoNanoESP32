@@ -355,14 +355,10 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
 
     makeInstCmd += "))";
     returnValue->instanceValue = MakeInstance(theEnv, makeInstCmd.c_str()); // todo: Definstances?
-    // todo: gpio_dump_io_configuration(buffer, pin); parse(buffer); ...
 
-    if (isModeInput)
-    {
-      String funcName = "sync-pin-state-";
-      funcName += pinArg;
-      AddPeriodicFunction(theEnv, funcName.c_str(), SyncPinStateFunction, 2500, returnValue->instanceValue);
-    }
+    String funcName = "sync-pin-state-";
+    funcName += pinArg;
+    AddPeriodicFunction(theEnv, funcName.c_str(), SyncPinStateFunction, 2500, returnValue->instanceValue);
 
     return;
   }
@@ -499,54 +495,21 @@ void PinResetFunction(Environment *theEnv, UDFContext *context, UDFValue *return
     return;
   }
 
-  bool removePeriodicFunc = false;
-  if (insdata->instanceValue != nullptr)
-  {
-    CLIPSValue *insMode = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
-    GetSlotError gse = DirectGetSlot(returnValue->instanceValue, "mode", insMode);
-    if (gse == GetSlotError::GSE_NO_ERROR)
-    {
-      removePeriodicFunc = strcmp(insMode->lexemeValue->contents, "INPUT") == 0;
-    }
-    genfree(theEnv, insMode, sizeof(CLIPSValue));
-  }
-  else
+  String funcName = "sync-pin-state-";
+  funcName += pinArg;
+  if (RemovePeriodicFunction(theEnv, funcName.c_str()))
   {
     esp_err_t resetErr = gpio_reset_pin(gpioNum);
     if (resetErr != ESP_OK)
     {
       Writeln(theEnv, "Something goes wrong with the IOMUX for this pin and the GPIO function.");
       UDFThrowError(context);
-      return;
-    }
-    genfree(theEnv, insdata, sizeof(CLIPSValue));
-    return;
-  }
-
-  if (removePeriodicFunc)
-  {
-    String funcName = "sync-pin-state-";
-    funcName += pinArg;
-    if (RemovePeriodicFunction(theEnv, funcName.c_str()))
-    {
-      esp_err_t resetErr = gpio_reset_pin(gpioNum);
-      if (resetErr != ESP_OK)
-      {
-        Writeln(theEnv, "Something goes wrong with the IOMUX for this pin and the GPIO function.");
-        UDFThrowError(context);
-        return;
-      }
     }
   }
   else
   {
-    esp_err_t resetErr = gpio_reset_pin(gpioNum);
-    if (resetErr != ESP_OK)
-    {
-      Writeln(theEnv, "Something goes wrong with the IOMUX for this pin and the GPIO function.");
-      UDFThrowError(context);
-      return;
-    }
+    Writeln(theEnv, "Something goes wrong with the IOMUX for this pin and the GPIO function.");
+    UDFThrowError(context);
   }
 
   genfree(theEnv, insdata, sizeof(CLIPSValue));
