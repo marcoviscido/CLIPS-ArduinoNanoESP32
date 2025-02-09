@@ -54,14 +54,13 @@
 #define ARDUINOJSON_ENABLE_ARDUINO_STRING 1
 #include "ArduinoJson-v7.3.0.h"
 
-WiFiClient espClient;             // WiFiClient
-PubSubClient psClient(espClient); // PubSubClient
+static WiFiClient espClient;             // WiFiClient
+static PubSubClient psClient(espClient); // PubSubClient
 
-bool stringComplete = false;
-bool stringInEdit = false;
-bool callbackRunning = false;
+static bool stringComplete = false;
+static bool stringInEdit = false;
+static bool callbackRunning = false;
 static Environment *mainEnv;
-const char *mqtt_topic = nullptr;
 
 static bool QueryTraceCallback(
     Environment *environment,
@@ -236,12 +235,12 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
   {
     return;
   }
-  addUDFError = AddUDFIfNotExists(theEnv, "wifi-begin", "vs", 1, 2, ";is;s", WifiBeginFunction, "WifiBeginFunction", NULL);
+  addUDFError = AddUDFIfNotExists(theEnv, "wifi-begin", "vs", 1, 2, ";ns;s", WifiBeginFunction, "WifiBeginFunction", NULL);
   addUDFError = AddUDFIfNotExists(theEnv, "wifi-status", "v", 0, 0, "*", WifiStatusFunction, "WifiStatusFunction", NULL);
   addUDFError = AddUDFIfNotExists(theEnv, "wifi-disconnect", "v", 0, 0, "*", WifiDisconnectFunction, "WifiDisconnectFunction", NULL);
   addUDFError = AddUDFIfNotExists(theEnv, "wifi-scan", "v", 0, 0, "*", WifiScanNetworksFunction, "WifiScanNetworksFunction", NULL);
 
-  addUDFError = AddUDFIfNotExists(theEnv, "mqtt-connect", "vs", 1, 1, ";i", MqttConnectFunction, "MqttConnectFunction", NULL);
+  addUDFError = AddUDFIfNotExists(theEnv, "mqtt-connect", "vs", 1, 1, ";n", MqttConnectFunction, "MqttConnectFunction", NULL);
   // addUDFError = AddUDFIfNotExists(theEnv, "mqtt-send", "v", 0, 0, "*", MqttSendFunction, "MqttSendFunction", NULL);
 
   BuildError buildError = BuildError::BE_NO_ERROR;
@@ -262,7 +261,7 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
     buildError = Build(theEnv, "(defclass MQTT \"A class to store MQTT connection's info.\" (is-a USER)"
                                "   (slot broker (access read-write) (type STRING))"
                                "   (slot port (access read-write) (type INTEGER)(default -1))"
-                               "   (slot clientid (access read-write) (type STRING))"
+                               "   (slot clientid (access read-only) (type STRING))"
                                "   (slot usr (access read-write) (type STRING))"
                                "   (slot pwd (access read-write) (type STRING))"
                                "   (slot topic (access read-write) (type STRING))"
@@ -294,18 +293,6 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
       ESP_LOGE("ArduninoInitFunction", "Error adding %s - %i", "defmessage-handler PIN delete before", (int8_t)buildError);
       return;
     }
-
-    // TODO: init instance state/value
-    // buildError = Build(theEnv, "(defmessage-handler PIN init after ()"
-    //                            "     (digital-read (instance-name ?self) )"
-    //                            ")");
-    // if (buildError != BuildError::BE_NO_ERROR)
-    // {
-    //   Write(theEnv, "ArduninoInitFunction defclass-PIN: ");
-    //   WriteInteger(theEnv, STDOUT, buildError);
-    //   Writeln(theEnv, "");
-    //   return;
-    // }
 
     buildError = Build(theEnv, "(defmessage-handler PIN print before ()"
                                "     (digital-read (instance-name ?self) )"
@@ -348,7 +335,6 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
   Eval(theEnv, "(digital-write LED_GREEN HIGH)", NULL);
   Eval(theEnv, "(digital-write LED_BLUE HIGH)", NULL);
   // gpio_dump_io_configuration() // gpio.c
-  // gpio_reset_pin // gpio.c
 
   ESP_LOGI("ArduninoInitFunction", "Arduino Nano ESP32 + CLIPS ready!");
   Writeln(theEnv, "Arduino Nano ESP32 + CLIPS ready!");
@@ -358,7 +344,7 @@ void MqttConnectFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
 {
   UDFValue theArg;
   Instance *theInstance;
-  const char *mqtt_broker = nullptr, *mqtt_username = nullptr, *mqtt_password = nullptr, *mqtt_client_id = nullptr;
+  const char *mqtt_broker = nullptr, *mqtt_username = nullptr, *mqtt_password = nullptr, *mqtt_topic = nullptr;
   int mqtt_port = -1;
 
   uint8_t argsCount = UDFArgumentCount(context);
@@ -366,7 +352,7 @@ void MqttConnectFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
   {
     return;
   }
-  if (!UDFNthArgument(context, 1, INSTANCE_ADDRESS_BIT, &theArg))
+  if (!UDFNthArgument(context, 1, INSTANCE_NAME_BIT, &theArg))
   {
     return;
   }
@@ -377,9 +363,9 @@ void MqttConnectFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
     return;
   }
 
-  if (theArg.instanceValue == nullptr)
+  if (theArg.lexemeValue->contents == nullptr)
   {
-    ESP_LOGE("MqttConnectFunction", "theArg.instanceValue == nullptr");
+    ESP_LOGE("MqttConnectFunction", "theArg.lexemeValue->contents == nullptr");
     return;
   }
 
@@ -389,40 +375,36 @@ void MqttConnectFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
     return;
   }
 
-  theInstance = theArg.instanceValue;
+  theInstance = FindInstance(theEnv, NULL, theArg.lexemeValue->contents, true);
   if (strcmp(theInstance->cls->header.name->contents, "MQTT") != 0)
   {
-    ESP_LOGE("MqttConnectFunction", "The instance type is not valid");
-    Writeln(theEnv, "The instance type is not valid");
+    ESP_LOGE("MqttConnectFunction", "The type of the instance %s is not valid", theArg.lexemeValue->contents);
+    Writeln(theEnv, "The type of the instance is not valid");
     UDFThrowError(context);
     return;
   }
 
   // MQTT Broker
-  CLIPSValue *p1 = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
-  CLIPSValue *p2 = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
-  CLIPSValue *p3 = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
-  CLIPSValue *p4 = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
-  CLIPSValue *p5 = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
-  CLIPSValue *p6 = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
-  DirectGetSlot(theInstance, "broker", p1);
-  DirectGetSlot(theInstance, "port", p2);
-  DirectGetSlot(theInstance, "clientid", p3);
-  DirectGetSlot(theInstance, "usr", p4);
-  DirectGetSlot(theInstance, "pwd", p5);
-  DirectGetSlot(theInstance, "topic", p6);
-  mqtt_broker = p1->lexemeValue->contents;
-  mqtt_port = p2->integerValue->contents;
-  mqtt_client_id = p3->lexemeValue->contents;
-  mqtt_username = p4->lexemeValue->contents;
-  mqtt_password = p5->lexemeValue->contents;
-  mqtt_topic = p6->lexemeValue->contents;
-  genfree(theEnv, p1, sizeof(CLIPSValue));
-  genfree(theEnv, p2, sizeof(CLIPSValue));
-  genfree(theEnv, p3, sizeof(CLIPSValue));
-  genfree(theEnv, p4, sizeof(CLIPSValue));
-  genfree(theEnv, p5, sizeof(CLIPSValue));
-  genfree(theEnv, p6, sizeof(CLIPSValue));
+  CLIPSValue *brokerCV = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
+  CLIPSValue *portCV = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
+  CLIPSValue *usrCV = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
+  CLIPSValue *pwdCV = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
+  CLIPSValue *topicCV = (CLIPSValue *)genalloc(theEnv, sizeof(CLIPSValue));
+  DirectGetSlot(theInstance, "broker", brokerCV);
+  DirectGetSlot(theInstance, "port", portCV);
+  DirectGetSlot(theInstance, "usr", usrCV);
+  DirectGetSlot(theInstance, "pwd", pwdCV);
+  DirectGetSlot(theInstance, "topic", topicCV);
+  mqtt_broker = brokerCV->lexemeValue->contents;
+  mqtt_port = portCV->integerValue->contents;
+  mqtt_username = usrCV->lexemeValue->contents;
+  mqtt_password = pwdCV->lexemeValue->contents;
+  mqtt_topic = topicCV->lexemeValue->contents;
+  genfree(theEnv, brokerCV, sizeof(CLIPSValue));
+  genfree(theEnv, portCV, sizeof(CLIPSValue));
+  genfree(theEnv, usrCV, sizeof(CLIPSValue));
+  genfree(theEnv, pwdCV, sizeof(CLIPSValue));
+  genfree(theEnv, topicCV, sizeof(CLIPSValue));
 
   if (mqtt_topic == nullptr)
   {
@@ -433,15 +415,28 @@ void MqttConnectFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
   // connecting to a mqtt broker
   psClient.setServer(mqtt_broker, mqtt_port);
   psClient.setCallback(MqttCallbackFunction);
+  String client_id = "";
   uint8_t attempt = 10;
   while (!psClient.connected() && attempt != 0)
   {
+    client_id.concat("clips-esp32-");
+    client_id.concat(WiFi.macAddress());
+
+    if (DirectPutSlotString(theInstance, "clientid", client_id.c_str()) != PutSlotError::PSE_NO_ERROR)
+    {
+      ESP_LOGE("MqttConnectFunction", "Something goes wrong with direct-put-value clientid");
+      Writeln(theEnv, "Something goes wrong with direct-put-value clientid");
+      UDFThrowError(context);
+      return;
+    }
+
     Write(theEnv, "The client ");
-    Write(theEnv, mqtt_client_id);
+    Write(theEnv, client_id.c_str());
     Writeln(theEnv, " connects to the public MQTT broker");
-    if (psClient.connect(mqtt_client_id, mqtt_username, mqtt_password))
+    if (psClient.connect(client_id.c_str(), mqtt_username, mqtt_password))
     {
       Writeln(theEnv, "MQTT broker connected");
+      returnValue->lexemeValue = CreateSymbol(theEnv, client_id.c_str());
       break;
     }
     else
@@ -454,18 +449,25 @@ void MqttConnectFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
     attempt--;
   }
 
-  // Publish and subscribe
+  if (client_id.length() == 0)
+  {
+    ESP_LOGE("MqttConnectFunction", "client_id.length() == 0");
+    Writeln(theEnv, "client_id.length() == 0");
+    UDFThrowError(context);
+    return;
+  }
 
+  // Publish and subscribe
   JsonDocument helloDoc;
-  helloDoc["src"] = mqtt_client_id;
+  helloDoc["src"] = client_id;
   helloDoc["dst"] = "ALL";
-  helloDoc["msg"] = "(void)";
+  helloDoc["msg"] = "hello!";
   size_t docSize = measureJson(helloDoc);
 
   char *output = (char *)genalloc(theEnv, docSize);
   serializeJson(helloDoc, output, docSize);
 
-  psClient.publish(mqtt_topic, output);
+  psClient.publish(mqtt_topic, output, docSize);
   genfree(theEnv, output, docSize);
 
   if (psClient.subscribe(mqtt_topic))
@@ -483,7 +485,25 @@ void MqttConnectFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
 void MqttCallbackFunction(char *topic, byte *payload, unsigned int length)
 {
   callbackRunning = true;
-  if (length == 0 || payload == nullptr || topic == nullptr || mqtt_topic == nullptr)
+
+  Instance *mqttInstance = FindInstance(mainEnv, NULL, "mqtt", true);
+  if (mqttInstance == nullptr)
+  {
+    ESP_LOGW("MqttCallbackFunction", "An MQTT instance named 'mqtt' not found");
+    callbackRunning = false;
+    return;
+  }
+
+  CLIPSValue *clientIdCV = (CLIPSValue *)genalloc(mainEnv, sizeof(CLIPSValue));
+  CLIPSValue *topicCV = (CLIPSValue *)genalloc(mainEnv, sizeof(CLIPSValue));
+  DirectGetSlot(mqttInstance, "clientid", clientIdCV);
+  DirectGetSlot(mqttInstance, "topic", topicCV);
+  const char *mqtt_clientId = clientIdCV->lexemeValue->contents;
+  const char *mqtt_topic = topicCV->lexemeValue->contents;
+  genfree(mainEnv, clientIdCV, sizeof(CLIPSValue));
+  genfree(mainEnv, topicCV, sizeof(CLIPSValue));
+
+  if (length == 0 || payload == nullptr || topic == nullptr || mqtt_clientId == nullptr)
   {
     callbackRunning = false;
     return;
@@ -500,7 +520,10 @@ void MqttCallbackFunction(char *topic, byte *payload, unsigned int length)
   for (int i = 0; i < length; i++)
   {
     char c = (char)payload[i];
-    if (c != NULL)
+    if (!c)
+    {
+    }
+    else
     {
       buffer += c;
     }
@@ -554,7 +577,7 @@ void MqttCallbackFunction(char *topic, byte *payload, unsigned int length)
 
     if (!ExecuteIfCommandComplete(mainEnv))
     {
-      ESP_LOGE("MqttCallbackFunction", " The command was not complete and without errors or the command contains an error.");
+      ESP_LOGE("MqttCallbackFunction", "The command was not complete or the command contains an error.");
     }
 
     // CLIPSValue *evalResults = (CLIPSValue *)genalloc(mainEnv, sizeof(CLIPSValue));

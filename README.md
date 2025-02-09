@@ -65,9 +65,9 @@ These functions offer the ability to interact with the underlying functions of t
 
     This give you the ability to read/write the value through the implicit slot-accessor and its default message handler:
     ```
-    (send [LED_RED] put-value LOW)
+    (send [LED_RED] put-value LOW)    ; digital-write will be invoked
     (send [LED_RED] put-value HIGH)
-    (send [D5] get-value)
+    (send [D5] get-value)             ; digital-read will be invoked
     ```
     
 - pin-reset
@@ -90,7 +90,16 @@ These functions offer the ability to interact with the underlying functions of t
 
 - [wifi-begin](https://docs.arduino.cc/libraries/wifi/#%60WiFi.begin()%60)
 
+    option 1:
+
     `(wifi-begin <ssid-string> <password-string>)`
+
+    option 2:
+
+    ```
+    (make-instance wifi of WIFI (ssid <ssid-string>)(pwd <password-string>))
+    (wifi-begin [wifi])
+    ```
 
 - [wifi-scan](https://docs.arduino.cc/libraries/wifi/#%60WiFi.scanNetworks()%60)
 
@@ -99,3 +108,18 @@ These functions offer the ability to interact with the underlying functions of t
 - [wifi-disconnect](https://docs.arduino.cc/libraries/wifi/#%60WiFi.disconnect()%60)
 
     `(wifi-disconnect)`
+
+- mqtt-connect
+
+    ```
+    (make-instance mqtt of MQTT 
+        (broker <string>)  ; broker url
+        (port <integer>)   ; broker port
+        (usr <string>)
+        (pwd <string>)
+        (topic <string>)
+        )
+
+    (mqtt-connect [mqtt])
+    (send [mqtt] get-clientid)
+    ```

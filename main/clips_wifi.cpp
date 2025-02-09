@@ -34,22 +34,23 @@ void WifiBeginFunction(Environment *theEnv, UDFContext *context, UDFValue *retur
     const char *ssid = nullptr, *pwd = nullptr;
 
     uint8_t argsCount = UDFArgumentCount(context);
-    if (argsCount == 1)
+    if (argsCount == 1) // when argsCount == 1 the ssid arg contains the name of a WIFI instance
     {
-        if (!UDFFirstArgument(context, INSTANCE_ADDRESS_BIT, &theSsid))
+        if (!UDFFirstArgument(context, INSTANCE_NAME_BIT, &theSsid))
         {
             return;
         }
-        if (theSsid.instanceValue == nullptr)
+        if (theSsid.lexemeValue->contents == nullptr)
         {
             SetErrorValue(theEnv, theSsid.header);
             UDFThrowError(context);
             return;
         }
-        Instance *theInstance = theSsid.instanceValue;
+        Instance *theInstance = FindInstance(theEnv, NULL, theSsid.lexemeValue->contents, true);
         if (strcmp(theInstance->cls->header.name->contents, "WIFI") != 0)
         {
-            Writeln(theEnv, "The instance type is not valid");
+            ESP_LOGE("WifiBeginFunction", "The type of the instance %s is not valid", theSsid.lexemeValue->contents);
+            Writeln(theEnv, "The type of the instance is not valid");
             UDFThrowError(context);
             return;
         }
@@ -94,7 +95,11 @@ void WifiBeginFunction(Environment *theEnv, UDFContext *context, UDFValue *retur
     while (WiFi.status() != WL_CONNECTED && attempt != 0)
     {
         delay(2000);
-        Writeln(theEnv, "Connecting to WiFi..");
+        Write(theEnv, "Connecting to WiFi...");
+        Write(theEnv, " (");
+        WriteInteger(theEnv, STDOUT, attempt);
+        Writeln(theEnv, ")");
+
         attempt--;
     }
 
