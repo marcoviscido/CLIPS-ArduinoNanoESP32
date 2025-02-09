@@ -123,3 +123,7 @@ These functions offer the ability to interact with the underlying functions of t
     (mqtt-connect [mqtt])
     (send [mqtt] get-clientid)
     ```
+
+- mqtt-disconnect
+
+    `(mqtt-disconnect)`
