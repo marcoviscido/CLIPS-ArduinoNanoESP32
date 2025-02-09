@@ -157,6 +157,7 @@ static void WriteMqttReplyCallback(
     helloDoc["dst"] = mqttRouterData->sender;
     helloDoc["msg_id"] = mqttRouterData->msgId;
     helloDoc["msg"] = str;
+    helloDoc["reply_me"] = "false";
     size_t docSize = measureJson(helloDoc) + 1;
 
     char *output = (char *)genalloc(theEnv, docSize);
@@ -563,6 +564,7 @@ void MqttConnectFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
   helloDoc["dst"] = "ALL";
   helloDoc["msg_id"] = uuid.toCharArray();
   helloDoc["msg"] = "hello!";
+  helloDoc["reply_me"] = "false";
   size_t docSize = measureJson(helloDoc) + 1;
 
   char *output = (char *)genalloc(theEnv, docSize);
@@ -642,8 +644,16 @@ void MqttCallbackFunction(char *topic, byte *payload, unsigned int length)
     delay(500);
   }
 
+  // The filter: it contains "true" for each value we want to keep
+  JsonDocument filter;
+  filter["src"] = true;
+  filter["dst"] = true;
+  filter["msg"] = true;
+  filter["msg_id"] = true;
+  filter["reply_me"] = true;
+
   JsonDocument doc;
-  DeserializationError desError = deserializeJson(doc, buffer);
+  DeserializationError desError = deserializeJson(doc, buffer, DeserializationOption::Filter(filter));
   if (desError)
   {
     ESP_LOGE("MqttCallbackFunction", "deserializeJson() failed: %s. Will be ignored.", desError.c_str());
@@ -654,9 +664,11 @@ void MqttCallbackFunction(char *topic, byte *payload, unsigned int length)
   String dst = doc["dst"];
   String msg = doc["msg"];
   String msgId = doc["msg_id"];
+  String replyMeString = doc["reply_me"] | "false";
 
   ESP_LOGV("MqttCallbackFunction", "Evaluate message from %s -> %s", src.c_str(), dst.c_str());
   ESP_LOGV("MqttCallbackFunction", "msg_id: %s", msgId.c_str());
+  ESP_LOGV("MqttCallbackFunction", "reply_me: %s", replyMeString.c_str());
   ESP_LOGV("MqttCallbackFunction", "");
   ESP_LOGV("MqttCallbackFunction", "%s", msg.c_str());
   ESP_LOGV("MqttCallbackFunction", "");
@@ -692,15 +704,16 @@ void MqttCallbackFunction(char *topic, byte *payload, unsigned int length)
     Writeln(mainEnv, "");
     PrintPrompt(mainEnv);
 
-    // // TODO: gestione reply
-    // if (reply == false)
-    // {
-    //   if (!ExecuteIfCommandComplete(mainEnv))
-    //   {
-    //     ESP_LOGE("MqttCallbackFunction", "The command was not complete or the command contains an error.");
-    //   }
-    //   callbackRunning = false;
-    // }
+    bool replyMe = strcmp("true", replyMeString.c_str()) == 0;
+    if (replyMe == false)
+    {
+      if (!ExecuteIfCommandComplete(mainEnv))
+      {
+        ESP_LOGE("MqttCallbackFunction", "The command was not complete or the command contains an error.");
+      }
+      callbackRunning = false;
+      return;
+    }
 
     MqttRouterData *mqttRouterData = (MqttRouterData *)genalloc(mainEnv, sizeof(MqttRouterData));
     mqttRouterData->mqttInstance = mqttInstance;

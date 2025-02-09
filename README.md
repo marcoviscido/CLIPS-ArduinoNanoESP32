@@ -130,11 +130,12 @@ These functions offer the ability to interact with the underlying functions of t
       "src": "clips-esp32-<WIFI-MAC-ADDRESS>",
       "dst": "ALL",
       "msg_id": "<UUID-string>",
-      "msg": "hello!"
+      "msg": "hello!",
+      "reply_me": "false" ; default value is false
     }
     ```
 
-    CLIPS will respond to messages sent to it with the results of the command received is msg.
+    This is also the structure of all messages exchanged. If `"reply_me": "true"` CLIPS will respond to messages sent to it with the results of the command received is msg.
 
     (send [mqtt] get-clientid)
 
