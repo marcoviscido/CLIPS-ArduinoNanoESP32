@@ -300,12 +300,10 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
       return;
     }
 
-    bool isModeInput = false;
     if (modeArg != nullptr && strcmp(modeArg, "INPUT") == 0)
     {
       pinMode(pin, INPUT);
       makeInstCmd += "INPUT";
-      isModeInput = true;
     }
     else if (modeArg != nullptr && strcmp(modeArg, "OUTPUT") == 0)
     {
@@ -321,7 +319,6 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
     {
       pinMode(pin, INPUT_PULLUP);
       makeInstCmd += "INPUT";
-      isModeInput = true;
     }
     else if (modeArg != nullptr && strcmp(modeArg, "PULLDOWN") == 0)
     {
@@ -332,13 +329,11 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
     {
       pinMode(pin, INPUT_PULLDOWN);
       makeInstCmd += "INPUT";
-      isModeInput = true;
     }
     else if (modeArg != nullptr && strcmp(modeArg, "OPEN_DRAIN") == 0)
     {
       pinMode(pin, OPEN_DRAIN);
       makeInstCmd += "INPUT";
-      isModeInput = true;
     }
     else if (modeArg != nullptr && strcmp(modeArg, "OUTPUT_OPEN_DRAIN") == 0)
     {
@@ -358,7 +353,7 @@ void PinModeFunction(Environment *theEnv, UDFContext *context, UDFValue *returnV
 
     String funcName = "sync-pin-state-";
     funcName += pinArg;
-    AddPeriodicFunction(theEnv, funcName.c_str(), SyncPinStateFunction, 2500, returnValue->instanceValue);
+    AddPeriodicFunction(theEnv, funcName.c_str(), SyncPinStateFunction, 5000, returnValue->instanceValue);
 
     return;
   }

@@ -28,6 +28,7 @@
 
 #define _H_MAIN
 
+#include <string>
 #include "clips.h"
 
 struct MqttRouterData
@@ -37,7 +38,6 @@ struct MqttRouterData
     const char *msgId;
 };
 
-void PubSubClientLoopFunction(Environment *theEnv, void *context);
 void ArduninoInitFunction(Environment *theEnv, void *context);
 void MqttCallbackFunction(char *topic, byte *payload, unsigned int length);
 void MqttConnectFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue);

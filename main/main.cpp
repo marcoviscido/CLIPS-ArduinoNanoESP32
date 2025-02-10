@@ -39,6 +39,7 @@
  * SOFTWARE.
  */
 
+#include <atomic>
 #include "Arduino.h"
 
 #include "clips.h"
@@ -49,20 +50,19 @@
 #include "main.h"
 
 #include "WiFi.h"         // TODO: https://github.com/espressif/esp-idf/blob/v5.4/examples/protocols/sntp/README.md
-#include "PubSubClient.h" // TODO: https://www.emqx.com/en/blog/esp32-connects-to-the-free-public-mqtt-broker
+#include "PubSubClient.h" // TODO: https://github.com/espressif/esp-mqtt/blob/master/include/mqtt_client.h
 
 #include "UUID.h"
 
 #define ARDUINOJSON_ENABLE_ARDUINO_STRING 1
 #include "ArduinoJson-v7.3.0.h"
 
-static WiFiClient espClient;             // WiFiClient
-static PubSubClient psClient(espClient); // PubSubClient
+WiFiClient espClient;             // WiFiClient
+PubSubClient psClient(espClient); // PubSubClient
 
-static bool stringComplete = false;
-static bool stringInEdit = false;
-static bool callbackRunning = false;
-static UUID uuid;
+static std::atomic<bool> inputStrComplete(false);
+static std::atomic<bool> mqttCbRunning(false);
+UUID uuid;
 static Environment *mainEnv;
 
 static bool QueryTraceCallback(
@@ -123,12 +123,13 @@ static void WriteMqttReplyCallback(
   {
     if (!str || !context || context == nullptr)
     {
-      ESP_LOGE("WriteTraceCallback", "Error: Null str pointer!");
+      ESP_LOGW("WriteTraceCallback", "Null str pointer!");
       return;
     }
 
     if (strcmp("\n", str) == 0 || strcmp("CLIPS> ", str) == 0)
     {
+      ESP_LOGW("WriteTraceCallback", "empty string");
       return;
     }
 
@@ -172,6 +173,14 @@ static void WriteMqttReplyCallback(
   }
 }
 
+static void MqttPubSubLoopTimer(void *arg)
+{
+  if (!mqttCbRunning.load())
+  {
+    psClient.loop();
+  }
+}
+
 void setup()
 {
   ESP_LOGI("Setup", "Starting CLIPS-ArduinoNanoESP32...");
@@ -203,16 +212,6 @@ void setup()
   uint32_t seed1 = random(999999999);
   uint32_t seed2 = random(999999999);
   uuid.seed(seed1, seed2);
-
-#if DEBUGGING_FUNCTIONS
-// Serial.println("CPU0 reset reason:");
-// print_reset_reason(rtc_get_reset_reason(0));
-// verbose_print_reset_reason(rtc_get_reset_reason(0));
-
-// Serial.println("CPU1 reset reason:");
-// print_reset_reason(rtc_get_reset_reason(1));
-// verbose_print_reset_reason(rtc_get_reset_reason(1));
-#endif
 
   mainEnv = CreateEnvironment();
   EnablePeriodicFunctions(mainEnv, true);
@@ -257,19 +256,18 @@ void loop()
 {
   while (Serial.available())
   {
-    stringInEdit = true;
     char inChar = (char)Serial.read();
     AppendNCommandString(mainEnv, &inChar, 1);
 
     if (inChar == '\r')
     {
-      stringComplete = true;
+      inputStrComplete.store(true);
     }
   }
 
-  if (stringComplete)
+  if (inputStrComplete.load())
   {
-    stringComplete = false;
+    inputStrComplete.store(false);
 
 #if DEBUGGING_FUNCTIONS
     Serial.println(GetCommandString(mainEnv)); // debug
@@ -281,12 +279,6 @@ void loop()
      * if the command contains an error.
      */
     ExecuteIfCommandComplete(mainEnv);
-    stringInEdit = false;
-  }
-
-  if (callbackRunning == false)
-  {
-    psClient.loop();
   }
 }
 
@@ -344,6 +336,7 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
                                "   (slot usr (access read-write) (type STRING))"
                                "   (slot pwd (access read-write) (type STRING))"
                                "   (slot topic (access read-write) (type STRING))"
+                               "   (slot connected (access read-only) (type SYMBOL)(default FALSE))"
                                ")");
     if (buildError != BuildError::BE_NO_ERROR)
     {
@@ -414,6 +407,17 @@ void ArduninoInitFunction(Environment *theEnv, void *context)
   Eval(theEnv, "(digital-write LED_GREEN HIGH)", NULL);
   Eval(theEnv, "(digital-write LED_BLUE HIGH)", NULL);
   // gpio_dump_io_configuration() // gpio.c
+
+  esp_timer_create_args_t timer_args = {
+      .callback = MqttPubSubLoopTimer,
+      .arg = NULL,
+      .dispatch_method = ESP_TIMER_TASK, // Esegue il callback in un task dedicato
+      .name = "MqttPubSubLoopTimer"};
+
+  esp_timer_handle_t timer;
+  esp_timer_create(&timer_args, &timer);
+
+  esp_timer_start_periodic(timer, 1000000); // 2s
 
   ESP_LOGI("ArduninoInitFunction", "Arduino Nano ESP32 + CLIPS ready!");
   Writeln(theEnv, "Arduino Nano ESP32 + CLIPS ready!");
@@ -519,6 +523,7 @@ void MqttConnectFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
   uint8_t attempt = 10;
   while (!psClient.connected() && attempt != 0)
   {
+    client_id = "";
     client_id.concat("clips-esp32-");
     client_id.concat(WiFi.macAddress());
 
@@ -535,6 +540,14 @@ void MqttConnectFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
     Writeln(theEnv, " connects to the public MQTT broker");
     if (psClient.connect(client_id.c_str(), mqtt_username, mqtt_password))
     {
+      if (DirectPutSlotSymbol(theInstance, "connected", theEnv->TrueSymbol->contents) != PutSlotError::PSE_NO_ERROR)
+      {
+        ESP_LOGE("MqttConnectFunction", "Something goes wrong with direct-put-value connected");
+        Writeln(theEnv, "Something goes wrong with direct-put-value connected");
+        UDFThrowError(context);
+        return;
+      }
+
       Writeln(theEnv, "MQTT broker connected");
       returnValue->lexemeValue = CreateSymbol(theEnv, client_id.c_str());
       break;
@@ -587,13 +600,13 @@ void MqttConnectFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
 
 void MqttCallbackFunction(char *topic, byte *payload, unsigned int length)
 {
-  callbackRunning = true;
+  mqttCbRunning.store(true);
 
   Instance *mqttInstance = FindInstance(mainEnv, NULL, "mqtt", true);
   if (mqttInstance == nullptr)
   {
     ESP_LOGW("MqttCallbackFunction", "An MQTT instance named 'mqtt' not found");
-    callbackRunning = false;
+    mqttCbRunning.store(false);
     return;
   }
 
@@ -608,14 +621,15 @@ void MqttCallbackFunction(char *topic, byte *payload, unsigned int length)
 
   if (length == 0 || payload == nullptr || topic == nullptr || mqtt_clientId == nullptr)
   {
-    callbackRunning = false;
+    ESP_LOGW("MqttCallbackFunction", "length == 0");
+    mqttCbRunning.store(false);
     return;
   }
 
   if (strcmp(topic, mqtt_topic) != 0)
   {
     ESP_LOGW("MqttCallbackFunction", "Message arrived in topic: %s. Will be ignored.", topic);
-    callbackRunning = false;
+    mqttCbRunning.store(false);
     return;
   }
 
@@ -637,14 +651,6 @@ void MqttCallbackFunction(char *topic, byte *payload, unsigned int length)
   ESP_LOGV("MqttCallbackFunction", "Message: %s", buffer.c_str());
   ESP_LOGV("MqttCallbackFunction", "-----------------------");
 
-  // TODO: not safe
-  while (stringInEdit)
-  {
-    ESP_LOGW("MqttCallbackFunction", "stringInEdit = true");
-    delay(500);
-  }
-
-  // The filter: it contains "true" for each value we want to keep
   JsonDocument filter;
   filter["src"] = true;
   filter["dst"] = true;
@@ -657,6 +663,7 @@ void MqttCallbackFunction(char *topic, byte *payload, unsigned int length)
   if (desError)
   {
     ESP_LOGE("MqttCallbackFunction", "deserializeJson() failed: %s. Will be ignored.", desError.c_str());
+    mqttCbRunning.store(false);
     return;
   }
 
@@ -676,69 +683,83 @@ void MqttCallbackFunction(char *topic, byte *payload, unsigned int length)
   if (src.length() == 0 || dst.length() == 0 || msg.length() == 0 || msgId.length() == 0)
   {
     ESP_LOGE("MqttCallbackFunction", "THE MESSAGE IS NOT VALID");
-    callbackRunning = false;
+    mqttCbRunning.store(false);
     return;
   }
 
   if (!(strcmp(mqtt_clientId, dst.c_str()) == 0 || strcmp("ALL", dst.c_str()) == 0))
   {
     ESP_LOGW("MqttCallbackFunction", "THE MESSAGE IS NOT FOR ME");
-    callbackRunning = false;
+    mqttCbRunning.store(false);
     return;
   }
 
   if (msg != NULL && msg.length() > 0)
   {
-    // TODO: add some security by design best-practice here
-    AppendNCommandString(mainEnv, msg.c_str(), msg.length());
-    const char lastChar = msg.c_str()[msg.length() - 1];
-    if (lastChar != '\r')
+
+    if (!msg.endsWith("\r"))
     {
-      AppendNCommandString(mainEnv, "\r", 1);
+      msg.concat('\r');
     }
 
-    Writeln(mainEnv, "");
-    Write(mainEnv, src.c_str());
-    Write(mainEnv, "> ");
-    Write(mainEnv, GetCommandString(mainEnv));
-    Writeln(mainEnv, "");
-    PrintPrompt(mainEnv);
+    if (!EngineData(mainEnv)->AlreadyRunning)
+    {
+      // TODO: add some security by design best-practice here
+      AppendNCommandString(mainEnv, msg.c_str(), strlen(msg.c_str()));
+    }
 
-    bool replyMe = strcmp("true", replyMeString.c_str()) == 0;
-    if (replyMe == false)
+    if (!(strcmp(mqtt_clientId, src.c_str()) == 0 && strcmp("ALL", dst.c_str()) == 0))
+    {
+      Writeln(mainEnv, "");
+      Write(mainEnv, src.c_str());
+      Write(mainEnv, "> ");
+      Writeln(mainEnv, GetCommandString(mainEnv));
+    }
+
+    MqttRouterData *mqttRouterData = nullptr;
+    if (strcmp("true", replyMeString.c_str()) == 0 || EngineData(mainEnv)->AlreadyRunning)
+    {
+      mqttRouterData = (MqttRouterData *)genalloc(mainEnv, sizeof(MqttRouterData));
+      mqttRouterData->mqttInstance = mqttInstance;
+      mqttRouterData->msgId = msgId.c_str();
+      mqttRouterData->sender = src.c_str();
+
+      AddRouter(mainEnv,
+                "mqtt",                 /* Router name */
+                20,                     /* Priority */
+                QueryMqttReplyCallback, /* Query function */
+                WriteMqttReplyCallback, /* Write function */
+                NULL,                   /* Read function */
+                NULL,                   /* Unread function */
+                NULL,                   /* Exit function */
+                mqttRouterData);        /* Context */
+      ActivateRouter(mainEnv, "mqtt");  // sends a reply to src of the message
+    }
+
+    if (EngineData(mainEnv)->AlreadyRunning)
+    {
+      ESP_LOGW("MqttCallbackFunction", "Clips is busy!");
+      Writeln(mainEnv, "BUSY");
+    }
+    else
     {
       if (!ExecuteIfCommandComplete(mainEnv))
       {
-        ESP_LOGE("MqttCallbackFunction", "The command was not complete or the command contains an error.");
+        ESP_LOGE("MqttCallbackFunction", "The received command was not complete or the command contains an error:");
+        ESP_LOGE("MqttCallbackFunction", "%s", msg.c_str());
       }
-      callbackRunning = false;
-      return;
     }
 
-    MqttRouterData *mqttRouterData = (MqttRouterData *)genalloc(mainEnv, sizeof(MqttRouterData));
-    mqttRouterData->mqttInstance = mqttInstance;
-    mqttRouterData->msgId = msgId.c_str();
-    mqttRouterData->sender = src.c_str();
-
-    AddRouter(mainEnv,
-              "mqtt",                 /* Router name */
-              20,                     /* Priority */
-              QueryMqttReplyCallback, /* Query function */
-              WriteMqttReplyCallback, /* Write function */
-              NULL,                   /* Read function */
-              NULL,                   /* Unread function */
-              NULL,                   /* Exit function */
-              mqttRouterData);        /* Context */
-    ActivateRouter(mainEnv, "mqtt");  // sends a reply to src of the message
-
-    if (!ExecuteIfCommandComplete(mainEnv))
+    if (strcmp("true", replyMeString.c_str()) == 0 || EngineData(mainEnv)->AlreadyRunning)
     {
-      ESP_LOGE("MqttCallbackFunction", "The command was not complete or the command contains an error.");
+      DeactivateRouter(mainEnv, "mqtt");
+      DeleteRouter(mainEnv, "mqtt");
+      genfree(mainEnv, mqttRouterData, sizeof(MqttRouterData));
     }
-
-    DeactivateRouter(mainEnv, "mqtt");
-    DeleteRouter(mainEnv, "mqtt");
-    genfree(mainEnv, mqttRouterData, sizeof(MqttRouterData));
   }
-  callbackRunning = false;
+  else
+  {
+    ESP_LOGW("MqttCallbackFunction", "msg.length() == 0");
+  }
+  mqttCbRunning.store(false);
 }
