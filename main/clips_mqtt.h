@@ -22,21 +22,33 @@
  * SOFTWARE.
  */
 
-#ifndef _H_MAIN
+#ifndef _H_CLIPS_MQTT_H
 
 #pragma once
 
-#define _H_MAIN
+#define _H_CLIPS_MQTT_H
 
-#include <atomic>
 #include <string>
 #include "clips.h"
-#include "UUID.h"
 
-extern std::atomic<bool> stringInEdit;
-extern Environment *mainEnv;
-extern UUID uuid;
+struct MqttRouterData
+{
+    /**
+     * The MQTT instance
+     */
+    Instance *mqttInstance;
+    const char *sender;
+    const char *msgId;
+};
 
-void ArduninoInitFunction(Environment *theEnv, void *context);
+void MqttConnectFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue);
+void MqttDisconnectFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue);
+void MqttPublishFunction(Environment *theEnv, UDFContext *context, UDFValue *returnValue);
+
+void mqtt_on_connected_cb(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+void mqtt_on_data_cb(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+
+void WriteMqttReplyCallback(Environment *environment, const char *logicalName, const char *str, void *context);
+bool QueryMqttReplyCallback(Environment *environment, const char *logicalName, void *context);
 
 #endif
