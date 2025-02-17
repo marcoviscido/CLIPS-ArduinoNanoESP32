@@ -88,7 +88,7 @@
 #define _H_miscfun
 
    void                           MiscFunctionDefinitions(Environment *);
-   void                           ExitCommand(Environment *,UDFContext *,UDFValue *); // Not needed in ArduinoNanoESP32
+   // void                           ExitCommand(Environment *,UDFContext *,UDFValue *); // Not needed in ArduinoNanoESP32
    void                           CreateFunction(Environment *,UDFContext *,UDFValue *);
    void                           SetgenFunction(Environment *,UDFContext *,UDFValue *);
    void                           GensymFunction(Environment *,UDFContext *,UDFValue *);

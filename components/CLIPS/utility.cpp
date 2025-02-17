@@ -465,6 +465,23 @@ void CallPeriodicTasks(
      }
   }
 
+/**************************************************/
+/* CallStartingTasks: Calls the list of functions */
+/*   for handling starting tasks.                 */
+/**************************************************/
+  void CallStartingTasks(
+      Environment *theEnv)
+  {
+    struct voidCallFunctionItem *periodPtr;
+
+    for (periodPtr = UtilityData(theEnv)->ListOfStartingFunctions;
+         periodPtr != NULL;
+         periodPtr = periodPtr->next)
+    {
+      (*periodPtr->func)(theEnv, periodPtr->context);
+    }
+  }
+
 /***************************************************/
 /* AddCleanupFunction: Adds a function to the list */
 /*   of functions called to perform cleanup such   */
@@ -516,6 +533,23 @@ void *GetPeriodicFunctionContext(
    if (theItem == NULL) return NULL;
 
    return theItem->context;
+  }
+
+/****************************************************/
+/* AddStartingFunction: Adds a function to the list */
+/*   of functions called to handle starting tasks.  */
+/****************************************************/
+bool AddStartingFunction(
+  Environment *theEnv,
+  const char *name,
+  VoidCallFunction *theFunction,
+  int priority,
+  void *context)
+  {
+   UtilityData(theEnv)->ListOfStartingFunctions =
+     AddVoidFunctionToCallList(theEnv,name,priority,theFunction,
+                           UtilityData(theEnv)->ListOfStartingFunctions,context);
+   return true;
   }
 
 /*******************************************************/

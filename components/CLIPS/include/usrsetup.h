@@ -5,3 +5,13 @@
    /*                                                     */
    /*               USER SETUP HEADER FILE                */
    /*******************************************************/
+
+#ifndef _H_usrsetup
+
+#pragma once
+
+#define _H_usrsetup
+
+#include <climits>
+
+#endif

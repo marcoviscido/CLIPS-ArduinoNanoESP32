@@ -185,7 +185,8 @@ void MiscFunctionDefinitions(
    Retain(theEnv,MiscFunctionData(theEnv)->errorCode.header);
 
 #if ! RUN_TIME
-   AddUDF(theEnv,"exit","v",0,1,"l",ExitCommand,"ExitCommand",NULL);
+  // Not needed in ArduinoNanoESP32
+  //  AddUDF(theEnv,"exit","v",0,1,"l",ExitCommand,"ExitCommand",NULL);
 
    AddUDF(theEnv,"gensym","y",0,0,NULL,GensymFunction,"GensymFunction",NULL);
    AddUDF(theEnv,"gensym*","y",0,0,NULL,GensymStarFunction,"GensymStarFunction",NULL);
@@ -240,34 +241,35 @@ void MiscFunctionDefinitions(
 #endif
   }
 
-/*****************************************************/
-/* ExitCommand: H/L command for exiting the program. */
-/*****************************************************/
-void ExitCommand(
-  Environment *theEnv,
-  UDFContext *context,
-  UDFValue *returnValue)
-  {
-   unsigned int argCnt;
-   int status;
-   UDFValue theArg;
+// Not needed in ArduinoNanoESP32
+// /*****************************************************/
+// /* ExitCommand: H/L command for exiting the program. */
+// /*****************************************************/
+// void ExitCommand(
+//   Environment *theEnv,
+//   UDFContext *context,
+//   UDFValue *returnValue)
+//   {
+//    unsigned int argCnt;
+//    int status;
+//    UDFValue theArg;
 
-   argCnt = UDFArgumentCount(context);
+//    argCnt = UDFArgumentCount(context);
 
-   if (argCnt == 0)
-     { ExitRouter(theEnv,EXIT_SUCCESS); }
-   else
-    {
-     if (! UDFFirstArgument(context,INTEGER_BIT,&theArg))
-       { ExitRouter(theEnv,EXIT_SUCCESS); }
+//    if (argCnt == 0)
+//      { ExitRouter(theEnv,EXIT_SUCCESS); }
+//    else
+//     {
+//      if (! UDFFirstArgument(context,INTEGER_BIT,&theArg))
+//        { ExitRouter(theEnv,EXIT_SUCCESS); }
 
-     status = (int) theArg.integerValue->contents;
-     if (GetEvaluationError(theEnv)) return;
-     ExitRouter(theEnv,status);
-    }
+//      status = (int) theArg.integerValue->contents;
+//      if (GetEvaluationError(theEnv)) return;
+//      ExitRouter(theEnv,status);
+//     }
 
-   return;
-  }
+//    return;
+//   }
 
 /******************************************************************/
 /* CreateFunction: H/L access routine for the create$ function.   */

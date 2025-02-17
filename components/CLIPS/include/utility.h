@@ -175,6 +175,7 @@ struct utilityData
   {
    struct voidCallFunctionItem *ListOfCleanupFunctions;
    struct voidCallFunctionItem *ListOfPeriodicFunctions;
+   struct voidCallFunctionItem *ListOfStartingFunctions;
    bool PeriodicFunctionsEnabled;
    bool YieldFunctionEnabled;
    void (*YieldTimeFunction)(void);
@@ -260,6 +261,10 @@ struct utilityData
    bool                           IsPrime(size_t);
    size_t                         IncreaseHashSize(size_t,size_t);
    size_t                         DecreaseHashSize(size_t);
+
+// Arduino Nano ESP32 + CLIPS adds:
+   bool                           AddStartingFunction(Environment *,const char *,VoidCallFunction *,int,void *);
+   void                           CallStartingTasks(Environment *);
    
 #endif /* _H_utility */
 
