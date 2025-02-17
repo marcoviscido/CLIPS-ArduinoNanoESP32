@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.41  03/11/23             */
+   /*            CLIPS Version 7.00  06/17/24             */
    /*                                                     */
    /*          INSTANCE PRIMITIVE SUPPORT MODULE          */
    /*******************************************************/
@@ -64,10 +64,17 @@
 /*            allocating storage for inherited slots.        */
 /*                                                           */
 /*            Removed unnecessary variable initialization    */
-/*            in IBAbort.                                     */
+/*            in IBAbort.                                    */
 /*                                                           */
 /*            Calling IMPutSlot with empty multifield to     */
 /*            multifield slot did not assign value.          */
+/*                                                           */
+/*      6.42: Fixed GC bug by including garbage fact and     */
+/*            instances in the GC frame.                     */
+/*                                                           */
+/*            Fixed memory leak for non-reactive instances.  */
+/*                                                           */
+/*      7.00: Support for certainty factors.                 */
 /*                                                           */
 /*************************************************************/
 
@@ -314,7 +321,7 @@ Instance *BuildInstance(
      {
       PrintErrorID(theEnv,"INSMNGR",10,false);
       WriteString(theEnv,STDERR,"Cannot create instances of reactive classes while ");
-      WriteString(theEnv,STDERR,"pattern-matching is in process.\n");
+      WriteString(theEnv,STDERR,"pattern matching is in process.\n");
       SetEvaluationError(theEnv,true);
       InstanceData(theEnv)->makeInstanceError = MIE_COULD_NOT_CREATE_ERROR;
       return NULL;
@@ -407,8 +414,13 @@ Instance *BuildInstance(
       any currently active basis - if the partial
       match was deleted, abort the instance creation
       ============================================== */
-   if (AddLogicalDependencies(theEnv,(struct patternEntity *) InstanceData(theEnv)->CurrentInstance,false)
+#if CERTAINTY_FACTORS
+   if (AddLogicalDependencies(theEnv,(struct patternEntity *) InstanceData(theEnv)->CurrentInstance,false,NON_CF_FACT)
         == false)
+#else
+   if (AddLogicalDependencies(theEnv,(struct patternEntity *) InstanceData(theEnv)->CurrentInstance,false,0)
+        == false)
+#endif
      {
       rtn_struct(theEnv,instance,InstanceData(theEnv)->CurrentInstance);
       InstanceData(theEnv)->CurrentInstance = NULL;
@@ -550,7 +562,7 @@ UnmakeInstanceError QuashInstance(
      {
       PrintErrorID(theEnv,"INSMNGR",12,false);
       WriteString(theEnv,STDERR,"Cannot delete instances of reactive classes while ");
-      WriteString(theEnv,STDERR,"pattern-matching is in process.\n");
+      WriteString(theEnv,STDERR,"pattern matching is in process.\n");
       SetEvaluationError(theEnv,true);
       InstanceData(theEnv)->unmakeInstanceError = UIE_COULD_NOT_DELETE_ERROR;
       return UIE_COULD_NOT_DELETE_ERROR;
@@ -629,7 +641,8 @@ UnmakeInstanceError QuashInstance(
    if ((iflag == 1) && (ins->patternHeader.busyCount == 0))
      {
       if ((ObjectReteData(theEnv)->DelayObjectPatternMatching == false) ||
-          (syncFlag == false)) 
+          (syncFlag == false) ||
+          (ins->cls->reactive == false))
         { RemoveInstanceData(theEnv,ins); }
       else
         { ins->dataRemovalDeferred = true; }
@@ -651,12 +664,20 @@ UnmakeInstanceError QuashInstance(
      }
    else
      {
+      struct garbageFrame *theGF;
+      
+      theGF = UtilityData(theEnv)->CurrentGarbageFrame;
+
       gptr = get_struct(theEnv,igarbage);
       ins->garbage = 1;
       gptr->ins = ins;
-      gptr->nxt = InstanceData(theEnv)->InstanceGarbageList;
-      InstanceData(theEnv)->InstanceGarbageList = gptr;
-      UtilityData(theEnv)->CurrentGarbageFrame->dirty = true;
+      gptr->nxt = theGF->GarbageInstances;
+      theGF->GarbageInstances = gptr;
+      
+      if (theGF->LastGarbageInstance == NULL)
+        { theGF->LastGarbageInstance = gptr; }
+
+      theGF->dirty = true;
      }
      
    InstanceData(theEnv)->ChangesToInstances = true;
@@ -670,7 +691,6 @@ UnmakeInstanceError QuashInstance(
    InstanceData(theEnv)->unmakeInstanceError = UIE_NO_ERROR;
    return UIE_NO_ERROR;
   }
-
 
 #if DEFRULE_CONSTRUCT
 

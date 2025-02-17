@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.41  07/23/21             */
+   /*            CLIPS Version 7.00  09/18/24             */
    /*                                                     */
    /*                  DEFGLOBAL MODULE                   */
    /*******************************************************/
@@ -65,6 +65,11 @@
 /*            the eval function now consistently returns the */
 /*            value of  the variable.                        */
 /*                                                           */
+/*      6.42: Fixed garbage collection issue with defglobal  */
+/*            assigned its current value.                    */
+/*                                                           */
+/*      7.00: Construct hashing for quick lookup.            */
+/*                                                           */
 /*************************************************************/
 
 #include "setup.h"
@@ -101,6 +106,7 @@
 /***************************************/
 
    static void                   *AllocateModule(Environment *);
+   static void                    InitModule(Environment *,void *);
    static void                    ReturnModule(Environment *,void *);
    static void                    ReturnDefglobal(Environment *,Defglobal *);
    static void                    InitializeDefglobalModules(Environment *);
@@ -164,7 +170,8 @@ void InitializeDefglobals(
                    SetNextConstruct,
                    (IsConstructDeletableFunction *) DefglobalIsDeletable,
                    (DeleteConstructFunction *) Undefglobal,
-                   (FreeConstructFunction *) ReturnDefglobal);
+                   (FreeConstructFunction *) ReturnDefglobal,
+                   (LookupConstructFunction *) LookupDefglobal);
   }
 
 /****************************************************/
@@ -192,6 +199,9 @@ static void DeallocateDefglobalData(
       theModuleItem = (struct defglobalModule *)
                       GetModuleItem(theEnv,theModule,
                                     DefglobalData(theEnv)->DefglobalModuleIndex);
+                                    
+      ClearDefmoduleHashMap(theEnv,&theModuleItem->header);
+
       rtn_struct(theEnv,defglobalModule,theModuleItem);
      }
 #else
@@ -233,6 +243,7 @@ static void InitializeDefglobalModules(
   {
    DefglobalData(theEnv)->DefglobalModuleIndex = RegisterModuleItem(theEnv,"defglobal",
                                     AllocateModule,
+                                    InitModule,
                                     ReturnModule,
 #if BLOAD_AND_BSAVE || BLOAD || BLOAD_ONLY
                                     BloadDefglobalModuleReference,
@@ -258,6 +269,20 @@ static void *AllocateModule(
   Environment *theEnv)
   {
    return (void *) get_struct(theEnv,defglobalModule);
+  }
+
+/**********************************************/
+/* InitModule: Initializes a deffacts module. */
+/**********************************************/
+static void InitModule(
+  Environment *theEnv,
+  void *theItem)
+  {
+   struct defglobalModule *theModule = (struct defglobalModule *) theItem;
+   
+   theModule->header.itemCount = 0;
+   theModule->header.hashTableSize = 0;
+   theModule->header.hashTable = NULL;
   }
 
 /*************************************************/
@@ -346,6 +371,8 @@ static void ReturnDefglobal(
 #if (! BLOAD_ONLY) && (! RUN_TIME)
    if (theDefglobal == NULL) return;
 
+   RemoveConstructFromHashMap(theEnv,&theDefglobal->header,theDefglobal->header.whichModule);
+
    /*====================================*/
    /* Return the global's current value. */
    /*====================================*/
@@ -387,7 +414,38 @@ static void ReturnDefglobal(
    DefglobalData(theEnv)->ChangeToGlobals = true;
 #endif
   }
+  
+/*****************************************/
+/* LookupDefglobal: Finds a defglobal by */
+/*   searching for it in the hashmap.    */
+/*****************************************/
+Defglobal *LookupDefglobal(
+  Environment *theEnv,
+  CLIPSLexeme *defglobalName)
+  {
+   struct defmoduleItemHeaderHM *theModuleItem;
+   size_t theHashValue;
+   struct itemHashTableEntry *theItem;
+   
+   theModuleItem = (struct defmoduleItemHeaderHM *)
+                   GetModuleItem(theEnv,NULL,DefglobalData(theEnv)->DefglobalModuleIndex);
+                   
+   if (theModuleItem->itemCount == 0)
+     { return NULL; }
 
+   theHashValue = HashSymbol(defglobalName->contents,theModuleItem->hashTableSize);
+
+   for (theItem = theModuleItem->hashTable[theHashValue];
+        theItem != NULL;
+        theItem = theItem->next)
+     {
+      if (theItem->item->name == defglobalName)
+        { return (Defglobal *) theItem->item; }
+     }
+
+   return NULL;
+  }
+  
 /************************************************************/
 /* DestroyDefglobal: Returns the data structures associated  */
 /*   with a defglobal construct to the pool of free memory. */
@@ -518,25 +576,6 @@ void QSetDefglobalValue(
      }
   }
 
-/**************************************************************/
-/* QFindDefglobal: Searches for a defglobal in the list of    */
-/*   defglobals. Returns a pointer to the defglobal if found, */
-/*   otherwise NULL.                                          */
-/**************************************************************/
-Defglobal *QFindDefglobal(
-  Environment *theEnv,
-  CLIPSLexeme *defglobalName)
-  {
-   Defglobal *theDefglobal;
-
-   for (theDefglobal = GetNextDefglobal(theEnv,NULL);
-        theDefglobal != NULL;
-        theDefglobal = GetNextDefglobal(theEnv,theDefglobal))
-     { if (defglobalName == theDefglobal->header.name) return theDefglobal; }
-
-   return NULL;
-  }
-
 /*******************************************************************/
 /* DefglobalValueForm: Returns the pretty print representation of  */
 /*   the current value of the specified defglobal. For example, if */
@@ -631,6 +670,11 @@ static bool EntityGetDefglobalValue(
    /*=================================*/
 
    CLIPSToUDFValue(&theGlobal->current,vPtr);
+   if (vPtr->header->type == MULTIFIELD_TYPE)
+     {
+      vPtr->multifieldValue = CopyMultifield(theEnv,vPtr->multifieldValue);
+      AddToMultifieldList(theEnv,vPtr->multifieldValue);
+     }
    
    if (vPtr->value == FalseSymbol(theEnv))
      { return false; }
@@ -658,6 +702,8 @@ bool QGetDefglobalUDFValue(
      {
       vPtr->begin = 0;
       vPtr->range = theGlobal->current.multifieldValue->length;
+      vPtr->multifieldValue = CopyMultifield(theEnv,vPtr->multifieldValue);
+      AddToMultifieldList(theEnv,vPtr->multifieldValue);
      }
      
    if (vPtr->value == FalseSymbol(theEnv))
@@ -1047,7 +1093,36 @@ static void RuntimeDefglobalAction(
    
    theDefglobal->header.env = theEnv;
    theDefglobal->current.value = VoidConstant(theEnv);
+   
+   AddConstructToHashMap(theEnv,&theDefglobal->header,theDefglobal->header.whichModule);
   }
+
+/*************************************************/
+/* RuntimeDefglobalCleanup: Action to be applied */
+/*   to each defglobal construct when a runtime  */
+/*   destruction occurs.                         */
+/*************************************************/
+static void RuntimeDefglobalCleanup(
+  Environment *theEnv,
+  ConstructHeader *theConstruct,
+  void *buffer)
+  {
+#if MAC_XCD
+#pragma unused(buffer)
+#endif
+   Defglobal *theDefglobal = (Defglobal *) theConstruct;
+      
+   RemoveConstructFromHashMap(theEnv,&theDefglobal->header,theDefglobal->header.whichModule);
+  }
+
+/***************************/
+/* DeallocateDefglobalCTC: */
+/***************************/
+static void DeallocateDefglobalCTC(
+   Environment *theEnv)
+   {
+    DoForAllConstructs(theEnv,RuntimeDefglobalCleanup,DefglobalData(theEnv)->DefglobalModuleIndex,true,NULL);
+   }
 
 /*******************************/
 /* DefglobalRunTimeInitialize: */
@@ -1056,6 +1131,7 @@ void DefglobalRunTimeInitialize(
   Environment *theEnv)
   {
    DoForAllConstructs(theEnv,RuntimeDefglobalAction,DefglobalData(theEnv)->DefglobalModuleIndex,true,NULL);
+   AddEnvironmentCleanupFunction(theEnv,"defglobalctc",DeallocateDefglobalCTC,0);
   }
 
 #endif

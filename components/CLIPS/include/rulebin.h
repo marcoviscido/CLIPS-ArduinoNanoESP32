@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*             CLIPS Version 6.40  07/30/16            */
+   /*             CLIPS Version 7.00  06/11/24            */
    /*                                                     */
    /*           DEFRULE BSAVE/BLOAD HEADER FILE           */
    /*******************************************************/
@@ -37,6 +37,10 @@
 /*            Removed use of void pointers for specific      */
 /*            data structures.                               */
 /*                                                           */
+/*      7.00: Support for data driven backward chaining.     */
+/*                                                           */
+/*            Support for certainty factors.                 */
+/*                                                           */
 /*************************************************************/
 
 #ifndef _H_rulebin
@@ -58,6 +62,7 @@ struct bsaveDefrule
    unsigned short localVarCnt;
    unsigned int complexity      : 12;
    unsigned int autoFocus       :  1;
+   short certainty;
    unsigned long dynamicSalience;
    unsigned long actions;
    unsigned long logicalJoin;
@@ -96,6 +101,8 @@ struct bsaveJoinNode
   {
    unsigned int firstJoin : 1;
    unsigned int logicalJoin : 1;
+   unsigned int goalJoin : 1;
+   unsigned int explicitJoin : 1;
    unsigned int joinFromTheRight : 1;
    unsigned int patternIsNegated : 1;
    unsigned int patternIsExists : 1;
@@ -103,6 +110,7 @@ struct bsaveJoinNode
    unsigned int depth : 7;
    unsigned long networkTest;
    unsigned long secondaryNetworkTest;
+   unsigned long goalExpression;
    unsigned long leftHash;
    unsigned long rightHash;
    unsigned long rightSideEntryStructure;
@@ -122,6 +130,7 @@ struct defruleBinaryData
    unsigned long NumberOfLinks;
    unsigned long RightPrimeIndex;
    unsigned long LeftPrimeIndex;
+   unsigned long GoalPrimeIndex;
    struct defruleModule *ModuleArray;
    Defrule *DefruleArray;
    struct joinNode *JoinArray;

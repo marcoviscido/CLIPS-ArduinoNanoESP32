@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.41  12/04/22             */
+   /*            CLIPS Version 7.00  01/29/25             */
    /*                                                     */
    /*                PRINT UTILITY MODULE                 */
    /*******************************************************/
@@ -70,6 +70,15 @@
 /*      6.41: Used gensnprintf in place of gensprintf and.   */
 /*            sprintf.                                       */
 /*                                                           */
+/*      7.00: Support for data driven backward chaining.     */
+/*                                                           */
+/*            Support for non-reactive fact patterns.        */
+/*                                                           */
+/*            Support for ?var:slot references to facts in   */
+/*            methods and rule actions.                      */
+/*                                                           */
+/*            Support for named facts.                       */
+/*                                                           */
 /*************************************************************/
 
 #include <stdio.h>
@@ -130,7 +139,7 @@ void WriteInteger(
   {
    char printBuffer[32];
 
-   gensnprintf(printBuffer,sizeof(printBuffer),"%lld",number);
+   snprintf(printBuffer,sizeof(printBuffer),"%lld",number);
    WriteString(theEnv,logicalName,printBuffer);
   }
 
@@ -145,7 +154,7 @@ void PrintUnsignedInteger(
   {
    char printBuffer[32];
 
-   gensnprintf(printBuffer,sizeof(printBuffer),"%llu",number);
+   snprintf(printBuffer,sizeof(printBuffer),"%llu",number);
    WriteString(theEnv,logicalName,printBuffer);
   }
 
@@ -159,6 +168,8 @@ void PrintAtom(
   void *value)
   {
    CLIPSExternalAddress *theAddress;
+   CLIPSBitMap *theBitMap;
+   int i;
    char buffer[20];
 
    switch (type)
@@ -168,6 +179,12 @@ void PrintAtom(
         break;
       case INTEGER_TYPE:
         WriteInteger(theEnv,logicalName,((CLIPSInteger *) value)->contents);
+        break;
+      case QUANTITY_TYPE:
+        WriteInteger(theEnv,logicalName,((CLIPSInteger *) value)->contents);
+        break;
+      case UQV_TYPE:
+        WriteString(theEnv,logicalName,"??");
         break;
       case SYMBOL_TYPE:
         WriteString(theEnv,logicalName,((CLIPSLexeme *) value)->contents);
@@ -195,10 +212,10 @@ void PrintAtom(
           {
            WriteString(theEnv,logicalName,"<Pointer-");
 
-           gensnprintf(buffer,sizeof(buffer),"%d-",theAddress->type);
+           snprintf(buffer,sizeof(buffer),"%d-",theAddress->type);
            WriteString(theEnv,logicalName,buffer);
 
-           gensnprintf(buffer,sizeof(buffer),"%p",((CLIPSExternalAddress *) value)->contents);
+           snprintf(buffer,sizeof(buffer),"%p",((CLIPSExternalAddress *) value)->contents);
            WriteString(theEnv,logicalName,buffer);
            WriteString(theEnv,logicalName,">");
           }
@@ -215,6 +232,15 @@ void PrintAtom(
 #endif
 
       case VOID_TYPE:
+        break;
+        
+      case BITMAP_TYPE:
+        theBitMap = (CLIPSBitMap *) value;
+        for (i = 0; i < (theBitMap->size * BITS_PER_BYTE); i++)
+          {
+           if (TestBitMap(theBitMap->contents,i)) WriteString(theEnv,logicalName,"1");
+           else WriteString(theEnv,logicalName,"0");
+          }
         break;
 
       default:
@@ -535,7 +561,7 @@ const char *FloatToString(
    char x;
    CLIPSLexeme *thePtr;
 
-   gensnprintf(floatString,sizeof(floatString),"%.15g",number);
+   snprintf(floatString,sizeof(floatString),"%.15g",number);
 
    for (i = 0; (x = floatString[i]) != '\0'; i++)
      {
@@ -562,7 +588,7 @@ const char *LongIntegerToString(
    char buffer[50];
    CLIPSLexeme *thePtr;
 
-   gensnprintf(buffer,sizeof(buffer),"%lld",number);
+   snprintf(buffer,sizeof(buffer),"%lld",number);
 
    thePtr = CreateString(theEnv,buffer);
    return thePtr->contents;
@@ -652,10 +678,10 @@ const char *DataObjectToString(
           {
            WriteString(theEnv,"DOTS","<Pointer-");
 
-           gensnprintf(buffer,sizeof(buffer),"%d-",theAddress->type);
+           snprintf(buffer,sizeof(buffer),"%d-",theAddress->type);
            WriteString(theEnv,"DOTS",buffer);
 
-           gensnprintf(buffer,sizeof(buffer),"%p",theAddress->contents);
+           snprintf(buffer,sizeof(buffer),"%p",theAddress->contents);
            WriteString(theEnv,"DOTS",buffer);
            WriteString(theEnv,"DOTS",">");
           }
@@ -671,7 +697,7 @@ const char *DataObjectToString(
          if (theDO->factValue == &FactData(theEnv)->DummyFact)
            { return("<Dummy Fact>"); }
 
-         gensnprintf(buffer,sizeof(buffer),"<Fact-%lld>",theDO->factValue->factIndex);
+         snprintf(buffer,sizeof(buffer),"<Fact-%lld>",theDO->factValue->factIndex);
          thePtr = CreateString(theEnv,buffer);
          return thePtr->contents;
 #endif
@@ -754,7 +780,7 @@ void FactRetractedErrorMessage(
    
    PrintErrorID(theEnv,"PRNTUTIL",11,false);
    WriteString(theEnv,STDERR,"The fact ");
-   gensnprintf(tempBuffer,sizeof(tempBuffer),"f-%lld",theFact->factIndex);
+   snprintf(tempBuffer,sizeof(tempBuffer),"f-%lld",theFact->factIndex);
    WriteString(theEnv,STDERR,tempBuffer);
    WriteString(theEnv,STDERR," has been retracted.\n");
   }
@@ -773,10 +799,10 @@ void FactVarSlotErrorMessage1(
    
    PrintErrorID(theEnv,"PRNTUTIL",12,false);
    
-   WriteString(theEnv,STDERR,"The variable/slot reference ?");
+   WriteString(theEnv,STDERR,"The variable:slot reference ?");
    WriteString(theEnv,STDERR,varSlot);
    WriteString(theEnv,STDERR," cannot be resolved because the referenced fact ");
-   gensnprintf(tempBuffer,sizeof(tempBuffer),"f-%lld",theFact->factIndex);
+   snprintf(tempBuffer,sizeof(tempBuffer),"f-%lld",theFact->factIndex);
    WriteString(theEnv,STDERR,tempBuffer);
    WriteString(theEnv,STDERR," has been retracted.\n");
   }
@@ -795,10 +821,10 @@ void FactVarSlotErrorMessage2(
    
    PrintErrorID(theEnv,"PRNTUTIL",13,false);
    
-   WriteString(theEnv,STDERR,"The variable/slot reference ?");
+   WriteString(theEnv,STDERR,"The variable:slot reference ?");
    WriteString(theEnv,STDERR,varSlot);
    WriteString(theEnv,STDERR," is invalid because the referenced fact ");
-   gensnprintf(tempBuffer,sizeof(tempBuffer),"f-%lld",theFact->factIndex);
+   snprintf(tempBuffer,sizeof(tempBuffer),"f-%lld",theFact->factIndex);
    WriteString(theEnv,STDERR,tempBuffer);
    WriteString(theEnv,STDERR," does not contain the specified slot.\n");
   }
@@ -814,7 +840,7 @@ void InvalidVarSlotErrorMessage(
   {
    PrintErrorID(theEnv,"PRNTUTIL",14,false);
    
-   WriteString(theEnv,STDERR,"The variable/slot reference ?");
+   WriteString(theEnv,STDERR,"The variable:slot reference ?");
    WriteString(theEnv,STDERR,varSlot);
    WriteString(theEnv,STDERR," is invalid because slot names must be symbols.\n");
   }
@@ -850,11 +876,60 @@ void InstanceVarSlotErrorMessage2(
   {
    PrintErrorID(theEnv,"PRNTUTIL",16,false);
    
-   WriteString(theEnv,STDERR,"The variable/slot reference ?");
+   WriteString(theEnv,STDERR,"The variable:slot reference ?");
    WriteString(theEnv,STDERR,varSlot);
    WriteString(theEnv,STDERR," is invalid because the referenced instance [");
    WriteString(theEnv,STDERR,theInstance->name->contents);
    WriteString(theEnv,STDERR,"] does not contain the specified slot.\n");
+  }
+
+/***************************************************/
+/* FactVarSlotErrorMessage3: Generic error message */
+/*   when a var/slot reference accesses a value    */
+/*   that is not a fact.                           */
+/***************************************************/
+void FactVarSlotErrorMessage3(
+  Environment *theEnv,
+  const char *varSlot)
+  {
+   PrintErrorID(theEnv,"PRNTUTIL",18,false);
+   
+   WriteString(theEnv,STDERR,"The variable:slot reference ?");
+   WriteString(theEnv,STDERR,varSlot);
+   WriteString(theEnv,STDERR," can not be resolved because the variable value is not a fact address.\n");
+  }
+
+/***************************************************/
+/* FactVarSlotErrorMessage4: Generic error message */
+/*   when a var/slot reference accesses a value    */
+/*   that is not a fact.                           */
+/***************************************************/
+void FactVarSlotErrorMessage4(
+  Environment *theEnv,
+  const char *varSlot,
+  const char *factName)
+  {
+   PrintErrorID(theEnv,"PRNTUTIL",18,false);
+      
+   WriteString(theEnv,STDERR,"The variable:slot reference ?");
+   WriteString(theEnv,STDERR,varSlot);
+   WriteString(theEnv,STDERR," can not be resolved because the variable value ");
+   WriteString(theEnv,STDERR,factName);
+   WriteString(theEnv,STDERR," does not reference a named fact.\n");
+  }
+
+/*****************************************************************/
+/* BindVarSlotErrorMessage: Generic error message for a var:slot */
+/*   reference used as the target of the bind function.          */
+/*****************************************************************/
+void BindVarSlotErrorMessage(
+  Environment *theEnv,
+  const char *bindName)
+  {
+   PrintErrorID(theEnv,"PRNTUTIL",19,true);
+   WriteString(theEnv,STDERR,"The variable:slot reference ?");
+   WriteString(theEnv,STDERR,bindName);
+   WriteString(theEnv,STDERR," is not a valid target for the bind function.\n");
   }
 
 /***************************************************/

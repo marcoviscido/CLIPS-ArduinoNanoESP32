@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*             CLIPS Version 6.40  08/25/16            */
+   /*             CLIPS Version 7.00  11/19/24            */
    /*                                                     */
    /*                DEFMODULE HEADER FILE                */
    /*******************************************************/
@@ -50,6 +50,15 @@
 /*                                                           */
 /*            UDF redesign.                                  */
 /*                                                           */
+/*      6.42: Fixed GC bug by including garbage fact and     */
+/*            instances in the GC frame.                     */
+/*                                                           */
+/*      7.00: Deftable construct added.                      */
+/*                                                           */
+/*            Construct hashing for quick lookup.            */
+/*                                                           */
+/*            Support for named facts.                       */
+/*                                                           */
 /*************************************************************/
 
 #ifndef _H_moduldef
@@ -66,7 +75,14 @@ typedef struct constructHeader ConstructHeader;
 typedef struct moduleStackItem ModuleStackItem;
 
 typedef void *AllocateModuleFunction(Environment *);
+typedef void InitModuleFunction(Environment *,void *);
 typedef void FreeModuleFunction(Environment *,void *);
+
+typedef ConstructHeader *FindConstructFunction(Environment *,const char *);
+typedef ConstructHeader *GetNextConstructFunction(Environment *,ConstructHeader *);
+typedef bool IsConstructDeletableFunction(ConstructHeader *);
+typedef bool DeleteConstructFunction(ConstructHeader *,Environment *);
+typedef void FreeConstructFunction(Environment *,ConstructHeader *);
 
 typedef enum
   {
@@ -80,13 +96,13 @@ typedef enum
    DEFMETHOD,
    DEFCLASS,
    DEFMESSAGE_HANDLER,
-   DEFINSTANCES
+   DEFINSTANCES,
+   DEFTABLE
   } ConstructType;
 
 #include <stdio.h>
 #include "entities.h"
 #include "userdata.h"
-#include "utility.h"
 
 struct constructHeader
   {
@@ -100,18 +116,31 @@ struct constructHeader
    Environment *env;
   };
 
+struct itemHashTableEntry
+  {
+   ConstructHeader *item;
+   size_t hashValue;
+   struct itemHashTableEntry *next;
+  };
+    
 struct defmoduleItemHeader
   {
    Defmodule *theModule;
    ConstructHeader *firstItem;
    ConstructHeader *lastItem;
   };
-
-typedef ConstructHeader *FindConstructFunction(Environment *,const char *);
-typedef ConstructHeader *GetNextConstructFunction(Environment *,ConstructHeader *);
-typedef bool IsConstructDeletableFunction(ConstructHeader *);
-typedef bool DeleteConstructFunction(ConstructHeader *,Environment *);
-typedef void FreeConstructFunction(Environment *,ConstructHeader *);
+  
+struct defmoduleItemHeaderHM
+  {
+   Defmodule *theModule;
+   ConstructHeader *firstItem;
+   ConstructHeader *lastItem;
+   unsigned long itemCount;
+   size_t hashTableSize;
+   struct itemHashTableEntry **hashTable;
+  };
+  
+typedef ConstructHeader *LookupConstructFunction(Environment *,CLIPSLexeme *);
 
 /**********************************************************************/
 /* defmodule                                                          */
@@ -188,6 +217,7 @@ struct moduleItem
    const char *name;
    unsigned moduleIndex;
    void *(*allocateFunction)(Environment *);
+   void  (*initFunction)(Environment *,void *);
    void  (*freeFunction)(Environment *,void *);
    void *(*bloadModuleReference)(Environment *,unsigned long);
    void  (*constructsToCModuleReference)(Environment *,FILE *,unsigned long,unsigned int,unsigned int);
@@ -231,6 +261,7 @@ struct defmoduleData
    struct portItem *PortItemArray;
    Defmodule *DefmoduleArray;
 #endif
+   struct defmoduleItemHeaderHM hashMap;
   };
 
 #define DefmoduleData(theEnv) ((struct defmoduleData *) GetEnvironmentData(theEnv,DEFMODULE_DATA))
@@ -244,6 +275,7 @@ struct defmoduleData
    int                            AllocateModuleStorage(void);
    unsigned                       RegisterModuleItem(Environment *,const char *,
                                                      AllocateModuleFunction *,
+                                                     InitModuleFunction *,
                                                      FreeModuleFunction *,
                                                      void *(*)(Environment *,unsigned long),
                                                      void (*)(Environment *,FILE *,unsigned long,unsigned int,unsigned int),
@@ -265,7 +297,10 @@ struct defmoduleData
    void                           IllegalModuleSpecifierMessage(Environment *);
    void                           AllocateDefmoduleGlobals(Environment *);
    unsigned short                 GetNumberOfDefmodules(Environment *);
+   void                           RemoveConstructFromHashMap(Environment *,ConstructHeader *,struct defmoduleItemHeader *);
+   void                           ClearDefmoduleHashMap(Environment *,struct defmoduleItemHeaderHM *);
+   void                           AddConstructToHashMap(Environment *theEnv,ConstructHeader *,struct defmoduleItemHeader *);
+   Defmodule                     *LookupDefmodule(Environment *,CLIPSLexeme *);
+   void                           AssignHashMapSize(Environment *,struct defmoduleItemHeaderHM *,size_t);
 
 #endif /* _H_moduldef */
-
-

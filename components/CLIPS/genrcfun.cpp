@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.41  12/04/22             */
+   /*            CLIPS Version 7.00  01/29/25             */
    /*                                                     */
    /*                                                     */
    /*******************************************************/
@@ -57,6 +57,12 @@
 /*      6.41: Used gensnprintf in place of gensprintf and.   */
 /*            sprintf.                                       */
 /*                                                           */
+/*      7.00: Construct hashing for quick lookup.            */
+/*                                                           */
+/*            Generic function support for deftemplates.     */
+/*                                                           */
+/*            Support for named facts.                       */
+/*                                                           */
 /*************************************************************/
 
 /* =========================================
@@ -75,6 +81,10 @@
 #if OBJECT_SYSTEM
 #include "classcom.h"
 #include "classfun.h"
+#endif
+
+#if DEFTEMPLATE_CONSTRUCT
+#include "tmpltdef.h"
 #endif
 
 #include "argacces.h"
@@ -151,6 +161,20 @@ void *AllocateDefgenericModule(
   {
    return (void *) get_struct(theEnv,defgenericModule);
   }
+  
+/**********************************************************/
+/* InitDefgenericModule: Initializes a defgeneric module. */
+/**********************************************************/
+void InitDefgenericModule(
+  Environment *theEnv,
+  void *theItem)
+  {
+   struct defgenericModule *theModule = (struct defgenericModule *) theItem;
+   
+   theModule->header.itemCount = 0;
+   theModule->header.hashTableSize = 0;
+   theModule->header.hashTable = NULL;
+  }
 
 /***************************************************
   NAME         : FreeDefgenericModule
@@ -177,7 +201,7 @@ void FreeDefgenericModule(
 
 /*************************************************/
 /* RuntimeDefgenericAction: Action to be applied */
-/*   to each deffacts construct when a runtime   */
+/*   to each defgeneric construct when a runtime */
 /*   initialization occurs.                      */
 /*************************************************/
 static void RuntimeDefgenericAction(
@@ -195,8 +219,37 @@ static void RuntimeDefgenericAction(
 
    for (gi = 0 ; gi < theDefgeneric->mcnt ; gi++)
      { theDefgeneric->methods[gi].header.env = theEnv; }
+     
+   AddConstructToHashMap(theEnv,&theDefgeneric->header,theDefgeneric->header.whichModule);
+  }
+  
+/**************************************************/
+/* RuntimeDefgenericCleanup: Action to be applied */
+/*   to each defgeneric construct when a runtime  */
+/*   destruction occurs.                          */
+/**************************************************/
+static void RuntimeDefgenericCleanup(
+  Environment *theEnv,
+  ConstructHeader *theConstruct,
+  void *buffer)
+  {
+#if MAC_XCD
+#pragma unused(buffer)
+#endif
+   Defgeneric *theDefgeneric = (Defgeneric *) theConstruct;
+      
+   RemoveConstructFromHashMap(theEnv,&theDefgeneric->header,theDefgeneric->header.whichModule);
   }
 
+/****************************/
+/* DeallocateDefgenericCTC: */
+/****************************/
+static void DeallocateDefgenericCTC(
+   Environment *theEnv)
+   {
+    DoForAllConstructs(theEnv,RuntimeDefgenericCleanup,DefgenericData(theEnv)->DefgenericModuleIndex,true,NULL);
+   }
+   
 /********************************/
 /* DefgenericRunTimeInitialize: */
 /********************************/
@@ -204,6 +257,7 @@ void DefgenericRunTimeInitialize(
   Environment *theEnv)
   {
    DoForAllConstructs(theEnv,RuntimeDefgenericAction,DefgenericData(theEnv)->DefgenericModuleIndex,true,NULL);
+   AddEnvironmentCleanupFunction(theEnv,"defgenericctc",DeallocateDefgenericCTC,0);
   }
 
 #endif
@@ -318,6 +372,8 @@ void RemoveDefgeneric(
   Defgeneric *theDefgeneric)
   {
    long i;
+   
+   RemoveConstructFromHashMap(theEnv,&theDefgeneric->header,theDefgeneric->header.whichModule);
 
    for (i = 0 ; i < theDefgeneric->mcnt ; i++)
      DeleteMethodInfo(theEnv,theDefgeneric,&theDefgeneric->methods[i]);
@@ -419,14 +475,28 @@ void DeleteMethodInfo(
       rptr = &meth->restrictions[j];
 
       for (k = 0 ; k < rptr->tcnt ; k++)
+        {
+         switch (rptr->types[k].type)
+           {
 #if OBJECT_SYSTEM
-        DecrementDefclassBusyCount(theEnv,(Defclass *) rptr->types[k]);
+            case DEFCLASS_PTR:
+              DecrementDefclassBusyCount(theEnv,rptr->types[k].theClass);
+              break;
 #else
-        ReleaseInteger(theEnv,(CLIPSInteger *) rptr->types[k]);
+            case INTEGER_TYPE:
+              ReleaseInteger(theEnv,rptr->types[k].theInteger);
+              break;
 #endif
 
+#if DEFTEMPLATE_CONSTRUCT
+            case DEFTEMPLATE_PTR:
+              DecrementDeftemplateBusyCount(theEnv,rptr->types[k].theTemplate);
+              break;
+#endif
+           }
+        }
       if (rptr->types != NULL)
-        rm(theEnv,rptr->types,(sizeof(void *) * rptr->tcnt));
+        rm(theEnv,rptr->types,(sizeof(struct restrictionType) * rptr->tcnt));
       ExpressionDeinstall(theEnv,rptr->query);
       ReturnPackedExpression(theEnv,rptr->query);
      }
@@ -468,7 +538,7 @@ void DestroyMethodInfo(
       rptr = &meth->restrictions[j];
 
       if (rptr->types != NULL)
-        rm(theEnv,rptr->types,(sizeof(void *) * rptr->tcnt));
+        rm(theEnv,rptr->types,(sizeof(struct restrictionType) * rptr->tcnt));
       ReturnPackedExpression(theEnv,rptr->query);
      }
 
@@ -589,7 +659,7 @@ void PrintMethod(
    SBReset(theSB);
    if (meth->system)
      SBAppend(theSB,"SYS");
-   gensnprintf(numbuf,sizeof(numbuf),"%-2hu ",meth->index);
+   snprintf(numbuf,sizeof(numbuf),"%-2hu ",meth->index);
    SBAppend(theSB,numbuf);
    for (j = 0 ; j < meth->restrictionCount ; j++)
      {
@@ -607,11 +677,24 @@ void PrintMethod(
         SBAppend(theSB,"(");
       for (k = 0 ; k < rptr->tcnt ; k++)
         {
+         switch (rptr->types[k].type)
+           {
 #if OBJECT_SYSTEM
-         SBAppend(theSB,DefclassName((Defclass *) rptr->types[k]));
+            case DEFCLASS_PTR:
+              SBAppend(theSB,DefclassName(rptr->types[k].theClass));
+              break;
 #else
-         SBAppend(theSB,TypeName(theEnv,((CLIPSInteger *) rptr->types[k])->contents));
+            case INTEGER_TYPE:
+              SBAppend(theSB,TypeName(theEnv,rptr->types[k].theInteger->contents));
+              break;
 #endif
+#if DEFTEMPLATE_CONSTRUCT
+            case DEFTEMPLATE_PTR:
+              SBAppend(theSB,DeftemplateName(rptr->types[k].theTemplate));
+              break;
+#endif
+           
+           }
          if ((k + 1) < rptr->tcnt)
            SBAppend(theSB," ");
         }

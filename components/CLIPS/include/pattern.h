@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*             CLIPS Version 6.40  11/01/16            */
+   /*             CLIPS Version 7.00  06/11/24            */
    /*                                                     */
    /*                PATTERN HEADER FILE                  */
    /*******************************************************/
@@ -40,6 +40,10 @@
 /*                                                           */
 /*            Removed initial-fact and initial-object        */
 /*            support.                                       */
+/*                                                           */
+/*      7.00: Support for data driven backward chaining.     */
+/*                                                           */
+/*            Support for certainty factors.                 */
 /*                                                           */
 /*************************************************************/
 
@@ -84,7 +88,7 @@ struct patternParser
    bool (*recognizeFunction)(CLIPSLexeme *);
    struct lhsParseNode *(*parseFunction)(Environment *,const char *,struct token *);
    bool (*postAnalysisFunction)(Environment *,struct lhsParseNode *);
-   struct patternNodeHeader *(*addPatternFunction)(Environment *,struct lhsParseNode *);
+   struct patternNodeHeader *(*addPatternFunction)(Environment *,struct lhsParseNode *,bool *,struct expr **);
    void (*removePatternFunction)(Environment *,struct patternNodeHeader *);
    struct expr *(*genJNConstantFunction)(void *,struct lhsParseNode *,int);
    void (*replaceGetJNValueFunction)(Environment *,struct expr *,struct lhsParseNode *,int);
@@ -123,6 +127,7 @@ struct patternData
    bool WithinNotCE;
    int GlobalSalience;
    bool GlobalAutoFocus;
+   short GlobalCertainty;
    struct expr *SalienceExpression;
    struct patternNodeHashEntry **PatternHashTable;
    unsigned long PatternHashTableSize;

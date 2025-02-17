@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.40  08/28/17             */
+   /*            CLIPS Version 7.00  06/28/24             */
    /*                                                     */
    /*                   RETRACT MODULE                    */
    /*******************************************************/
@@ -42,6 +42,10 @@
 /*            Removed use of void pointers for specific      */
 /*            data structures.                               */
 /*                                                           */
+/*      7.00: Support for data driven backward chaining.     */
+/*                                                           */
+/*            Support for non-reactive fact patterns.        */
+/*                                                           */
 /*************************************************************/
 
 #include <stdio.h>
@@ -57,6 +61,7 @@
 #include "drive.h"
 #include "engine.h"
 #include "envrnmnt.h"
+#include "factgoal.h"
 #include "lgcldpnd.h"
 #include "match.h"
 #include "memalloc.h"
@@ -65,6 +70,10 @@
 #include "reteutil.h"
 #include "router.h"
 #include "symbol.h"
+
+#if DEFTEMPLATE_CONSTRUCT
+#include "factmngr.h"
+#endif
 
 #include "retract.h"
 
@@ -98,26 +107,39 @@ void NetworkRetract(
      {
       nextMatch = tempMatch->next;
 
-      tempMatch->theMatch->deleting = true;
-      
-      if (tempMatch->theMatch->children != NULL)
-        { PosEntryRetractAlpha(theEnv,tempMatch->theMatch,NETWORK_RETRACT); }
-
-      if (tempMatch->theMatch->blockList != NULL)
-        { NegEntryRetractAlpha(theEnv,tempMatch->theMatch,NETWORK_RETRACT); }
-
-      /*===================================================*/
-      /* Remove from the alpha memory of the pattern node. */
-      /*===================================================*/
-
-      RemoveAlphaMemoryMatches(theEnv,tempMatch->matchingPattern,
-                               tempMatch->theMatch,
-                               tempMatch->theMatch->binds[0].gm.theMatch);
-
-      rtn_struct(theEnv,patternMatch,tempMatch);
+      NetworkRetractMatch(theEnv,tempMatch);
 
       tempMatch = nextMatch;
      }
+  }
+
+/***********************************************************/
+/* NetworkRetractMatch:  Retracts a data entity (such as a */
+/*   fact or instance) from the pattern and join networks  */
+/*   given a pointer to a specific pattern which the data  */
+/*   entity matched.                                       */
+/***********************************************************/
+void NetworkRetractMatch(
+  Environment *theEnv,
+  struct patternMatch *theMatch)
+  {
+   theMatch->theMatch->deleting = true;
+      
+   if (theMatch->theMatch->children != NULL)
+     { PosEntryRetractAlpha(theEnv,theMatch->theMatch,NETWORK_RETRACT); }
+
+   if (theMatch->theMatch->blockList != NULL)
+     { NegEntryRetractAlpha(theEnv,theMatch->theMatch,NETWORK_RETRACT); }
+
+   /*===================================================*/
+   /* Remove from the alpha memory of the pattern node. */
+   /*===================================================*/
+
+   RemoveAlphaMemoryMatches(theEnv,theMatch->matchingPattern,
+                            theMatch->theMatch,
+                            theMatch->theMatch->binds[0].gm.theMatch);
+   
+   rtn_struct(theEnv,patternMatch,theMatch);
   }
 
 /*************************/
@@ -129,9 +151,18 @@ void PosEntryRetractAlpha(
   int operation)
   {
    struct partialMatch *betaMatch, *tempMatch;
-   struct joinNode *joinPtr;
+   struct joinNode *joinPtr, *lastJoin;
+#if DEFTEMPLATE_CONSTRUCT
+   struct partialMatch *goalMatch;
+#endif
 
    betaMatch = alphaMatch->children;
+   
+   if (betaMatch != NULL)
+     { lastJoin = ((struct joinNode *) betaMatch->owner)->lastLevel; }
+   else
+     { lastJoin = NULL; }
+   
    while (betaMatch != NULL)
      {
       joinPtr = (struct joinNode *) betaMatch->owner;
@@ -148,6 +179,22 @@ void PosEntryRetractAlpha(
 		  (betaMatch->marker != NULL) : false)
 		{ RemoveActivation(theEnv,(struct activation *) betaMatch->marker,true,true); }
 
+      /*=======================================*/
+      /* Remove support for any attached goal. */
+      /*=======================================*/
+      
+#if DEFTEMPLATE_CONSTRUCT
+      if (betaMatch->goalMarker && (betaMatch->marker != NULL))
+        { UpdateGoalSupport(theEnv,betaMatch,true); }
+                                                 
+      if ((lastJoin != NULL) &&
+          (lastJoin->goalJoin) &&
+          (betaMatch->leftParent != NULL))
+        { goalMatch = betaMatch->leftParent; }
+      else
+        { goalMatch = NULL; }
+#endif
+
 	  tempMatch = betaMatch->nextRightChild;
 
 	  if (betaMatch->rhsMemory)
@@ -155,10 +202,28 @@ void PosEntryRetractAlpha(
 	  else
 		{ UnlinkBetaPMFromNodeAndLineage(theEnv,joinPtr,betaMatch,LHS); }
 
+#if DEFTEMPLATE_CONSTRUCT
+      if ((goalMatch != NULL) &&
+          (goalMatch->children == NULL))
+        { AttachGoal(theEnv,lastJoin,goalMatch,goalMatch,true); }
+#endif
+
       DeletePartialMatches(theEnv,betaMatch);
 
       betaMatch = tempMatch;
      }
+
+#if DEFTEMPLATE_CONSTRUCT
+   if ((lastJoin != NULL) &&
+       (lastJoin->firstJoin == true) &&
+       (lastJoin->goalExpression != NULL))
+     {
+      tempMatch = GetAlphaMemory(theEnv,(struct patternNodeHeader *) lastJoin->rightSideEntryStructure,0);
+      if ((tempMatch == alphaMatch) &&
+          (tempMatch->nextInMemory == NULL))
+        { AttachGoal(theEnv,lastJoin,NULL,lastJoin->leftMemory->beta[0],true); }
+     }
+#endif
   }
 
 /*************************/
@@ -290,6 +355,11 @@ void PosEntryRetractBeta(
       else
         { UnlinkNonLeftLineage(theEnv,(struct joinNode *) betaMatch->owner,betaMatch,LHS); }
 
+#if DEFTEMPLATE_CONSTRUCT
+      if (betaMatch->goalMarker && (betaMatch->marker != NULL))
+        { UpdateGoalSupport(theEnv,betaMatch,true); }
+#endif
+
       if (betaMatch->dependents != NULL) RemoveLogicalSupport(theEnv,betaMatch);
       ReturnPartialMatch(theEnv,betaMatch);
 
@@ -343,7 +413,9 @@ static bool FindNextConflictingMatch(
         possibleConflicts != NULL;
         possibleConflicts = possibleConflicts->nextInMemory)
      {
+#if DEBUGGING_FUNCTIONS
       theJoin->memoryCompares++;
+#endif
 
       /*=====================================*/
       /* Initially indicate that the partial */
@@ -479,7 +551,7 @@ bool PartialMatchWillBeDeleted(
   struct partialMatch *thePM)
   {
    unsigned short i;
-   struct patternEntity * thePE;
+   struct patternEntity *thePE;
 
    if (thePM == NULL) return false;
    
@@ -554,6 +626,15 @@ void ReturnPartialMatch(
   Environment *theEnv,
   struct partialMatch *waste)
   {
+   /*=======================================*/
+   /* Update goal support if there's a goal */
+   /* associated with this partial match.   */
+   /*=======================================*/
+   
+#if DEFTEMPLATE_CONSTRUCT
+   if (waste->goalMarker) UpdateGoalSupport(theEnv,waste,true);
+#endif
+
    /*==============================================*/
    /* If the partial match is in use, then put it  */
    /* on a garbage list to be processed later when */

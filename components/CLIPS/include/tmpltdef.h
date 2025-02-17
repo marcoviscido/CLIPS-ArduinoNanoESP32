@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*             CLIPS Version 6.40  05/03/19            */
+   /*             CLIPS Version 7.00  08/08/24            */
    /*                                                     */
    /*               DEFTEMPLATE HEADER FILE               */
    /*******************************************************/
@@ -55,6 +55,18 @@
 /*                                                           */
 /*            ALLOW_ENVIRONMENT_GLOBALS no longer supported. */
 /*                                                           */
+/*      7.00: Data driven backward chaining.                 */
+/*                                                           */
+/*            Deftemplate inheritance.                       */
+/*                                                           */
+/*            Support for non-reactive fact patterns.        */
+/*                                                           */
+/*            Construct hashing for quick lookup.            */
+/*                                                           */
+/*            Support for certainty factors.                 */
+/*                                                           */
+/*            Support for named facts.                       */
+/*                                                           */
 /*************************************************************/
 
 #ifndef _H_tmpltdef
@@ -78,7 +90,7 @@ struct deftemplateModule;
 
 struct deftemplateModule
   {
-   struct defmoduleItemHeader header;
+   struct defmoduleItemHeaderHM header;
   };
 
 #include "constrnt.h"
@@ -87,13 +99,20 @@ struct deftemplateModule
 struct deftemplate
   {
    ConstructHeader header;
+   struct deftemplate *parent;
+   struct deftemplate *child;
+   struct deftemplate *sibling;
    struct templateSlot *slotList;
    unsigned int implied       : 1;
-   unsigned int watch         : 1;
+   unsigned int watchFacts    : 1;
+   unsigned int watchGoals    : 1;
    unsigned int inScope       : 1;
+   unsigned int cfd           : 1;
+   unsigned int named         : 1;
    unsigned short numberOfSlots;
    long busyCount;
    struct factPatternNode *patternNetwork;
+   struct factPatternNode *goalNetwork;
    Fact *factList;
    Fact *lastFact;
   };
@@ -105,12 +124,12 @@ struct templateSlot
    unsigned int noDefault : 1;
    unsigned int defaultPresent : 1;
    unsigned int defaultDynamic : 1;
+   unsigned int reactive : 1;
    CONSTRAINT_RECORD *constraints;
    Expression *defaultList;
    Expression *facetList;
    struct templateSlot *next;
   };
-
 
 #define DEFTEMPLATE_DATA 5
 
@@ -142,10 +161,11 @@ struct deftemplateData
    void                           ReturnSlots(Environment *,struct templateSlot *);
    void                           IncrementDeftemplateBusyCount(Environment *,Deftemplate *);
    void                           DecrementDeftemplateBusyCount(Environment *,Deftemplate *);
-   void                          *CreateDeftemplateScopeMap(Environment *,Deftemplate *);
+   CLIPSBitMap                   *CreateDeftemplateScopeMap(Environment *,Deftemplate *);
 #if RUN_TIME
    void                           DeftemplateRunTimeInitialize(Environment *);
 #endif
+   bool                           HasSupertemplate(Deftemplate *,Deftemplate *);
    const char                    *DeftemplateModule(Deftemplate *);
    const char                    *DeftemplateName(Deftemplate *);
    const char                    *DeftemplatePPForm(Deftemplate *);

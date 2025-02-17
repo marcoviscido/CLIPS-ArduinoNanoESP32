@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.41  12/04/22             */
+   /*            CLIPS Version 7.00  02/05/25             */
    /*                                                     */
    /*            STRING_TYPE FUNCTIONS MODULE             */
    /*******************************************************/
@@ -81,6 +81,8 @@
 /*      6.41: Used gensnprintf in place of gensprintf and.   */
 /*            sprintf.                                       */
 /*                                                           */
+/*      6.42: Added str-byte-length function.                */
+/*                                                           */
 /*************************************************************/
 
 #include "setup.h"
@@ -134,6 +136,7 @@ void StringFunctionDefinitions(
    AddUDF(theEnv,"str-cat","sy",1,UNBOUNDED,"synld" ,StrCatFunction,"StrCatFunction",NULL);
    AddUDF(theEnv,"sym-cat","sy",1,UNBOUNDED,"synld" ,SymCatFunction,"SymCatFunction",NULL);
    AddUDF(theEnv,"str-length","l",1,1,"syn",StrLengthFunction,"StrLengthFunction",NULL);
+   AddUDF(theEnv,"str-byte-length","l",1,1,"syn",StrByteLengthFunction,"StrByteLengthFunction",NULL);
    AddUDF(theEnv,"str-compare","l",2,3,"*;syn;syn;l" ,StrCompareFunction,"StrCompareFunction",NULL);
    AddUDF(theEnv,"upcase","syn",1,1,"syn",UpcaseFunction,"UpcaseFunction",NULL);
    AddUDF(theEnv,"lowcase","syn",1,1,"syn",LowcaseFunction,"LowcaseFunction",NULL);
@@ -189,6 +192,7 @@ static void StrOrSymCatFunction(
    size_t total;
    size_t j;
    char *theString;
+   size_t spaceLeft, amount;
    CLIPSLexeme **arrayOfStrings;
    CLIPSLexeme *hashPtr;
    Environment *theEnv = context->environment;
@@ -273,12 +277,16 @@ static void StrOrSymCatFunction(
    /*=========================================================*/
 
    theString = (char *) gm2(theEnv,(sizeof(char) * total));
+   
+   spaceLeft = sizeof(char) * total;
 
    j = 0;
    for (i = 0 ; i < numArgs ; i++)
      {
-      gensprintf(&theString[j],"%s",arrayOfStrings[i]->contents);
-      j += strlen(arrayOfStrings[i]->contents);
+      snprintf(&theString[j],spaceLeft,"%s",arrayOfStrings[i]->contents);
+      amount = strlen(arrayOfStrings[i]->contents);
+      j += amount;
+      spaceLeft -= amount;
      }
 
    /*=========================================*/
@@ -326,6 +334,32 @@ void StrLengthFunction(
    returnValue->integerValue = CreateInteger(theEnv,(long long) UTF8Length(theArg.lexemeValue->contents));
   }
 
+
+/*********************************************/
+/* StrByteLengthFunction: H/L access routine */
+/*   for the str-byte-length function.       */
+/*********************************************/
+void StrByteLengthFunction(
+  Environment *theEnv,
+  UDFContext *context,
+  UDFValue *returnValue)
+  {
+   UDFValue theArg;
+
+   /*==================================================================*/
+   /* The argument should be of type symbol, string, or instance name. */
+   /*==================================================================*/
+
+   if (! UDFFirstArgument(context,LEXEME_BITS | INSTANCE_NAME_BIT,&theArg))
+     { return; }
+
+   /*============================================*/
+   /* Return the length of the string or symbol. */
+   /*============================================*/
+
+   returnValue->integerValue = CreateInteger(theEnv,(long long) strlen(theArg.lexemeValue->contents));
+  }
+  
 /****************************************/
 /* UpcaseFunction: H/L access routine   */
 /*   for the upcase function.           */
@@ -707,7 +741,7 @@ void StrReplaceFunction(
   {
    UDFValue initial, find, replace;
    size_t findLength, replaceLength;
-   size_t returnLength;
+   size_t returnLength, remaining;
    const char *traverse, *found;
    const char *initialString, *findString, *replaceString;
    char *returnString, *target;
@@ -758,7 +792,7 @@ void StrReplaceFunction(
         }
      }
    
-   returnString = (char *) gm2(theEnv,(sizeof(char) * returnLength));
+   returnString = (char *) gm2(theEnv,returnLength);
 
    /*================================*/
    /* Copy values to the new string. */
@@ -766,15 +800,53 @@ void StrReplaceFunction(
 
    traverse = initialString;
    target = returnString;
+   target[0] = EOS;
+   remaining = returnLength - 1;
+
    while ((found = strstr(traverse,findString)) != NULL)
      {
-      strncpy(target,traverse,found - traverse);
-      target += (found - traverse);
-      strcpy(target,replaceString);
+      size_t copyAmount = (size_t) (found - traverse);
+
+      /*===========================================*/
+      /* Copy the portion before the found string. */
+      /*===========================================*/
+
+      genstrncat(target,traverse,copyAmount);
+
+      /*=====================*/
+      /* Advance the target. */
+      /*=====================*/
+
+      remaining -= copyAmount;
+      target += copyAmount;
+
+      /*==============================*/
+      /* Copy the replacement string. */
+      /*==============================*/
+
+      genstrncat(target,replaceString,replaceLength);
+
+      /*=====================*/
+      /* Advance the target. */
+      /*=====================*/
+
+      remaining -= replaceLength;
       target += replaceLength;
+
+      /*=====================*/
+      /* Advance the source. */
+      /*=====================*/
+
       traverse = found + findLength;
      }
-   strcpy(target,traverse);
+
+   /*===============================*/
+   /* Copy any remaining characters */
+   /* past the last replacement.    */
+   /*===============================*/
+   
+   if (remaining != 0)
+     { genstrncat(target,traverse,remaining); }
    
    /*==========================*/
    /* Create the return value. */
@@ -787,7 +859,7 @@ void StrReplaceFunction(
    else
      { returnValue->value = CreateInstanceName(theEnv,returnString); }
 
-   rm(theEnv,returnString,sizeof(char) * returnLength);
+   rm(theEnv,returnString,returnLength);
   }
 
 /**************************************/
@@ -855,7 +927,7 @@ EvalError Eval(
    /*======================================================*/
 
    depth++;
-   gensnprintf(logicalNameBuffer,sizeof(logicalNameBuffer),"Eval-%d",depth);
+   snprintf(logicalNameBuffer,sizeof(logicalNameBuffer),"Eval-%d",depth);
    if (OpenStringSource(theEnv,logicalNameBuffer,theString,0) == 0)
      {
       SystemError(theEnv,"STRNGFUN",1);
@@ -971,12 +1043,12 @@ EvalError Eval(
         { CleanCurrentGarbageFrame(theEnv,NULL); }
       CallPeriodicTasks(theEnv);
      }
-
+     
    if (returnValue != NULL)
      { returnValue->value = evalResult.value; }
-
+   
    if (GetEvaluationError(theEnv)) return EE_PROCESSING_ERROR;
-
+   
    return EE_NO_ERROR;
   }
 

@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.40  07/30/16             */
+   /*            CLIPS Version 7.00  09/18/24             */
    /*                                                     */
    /*           SYMBOL_TYPE CONSTRUCT COMPILER MODULE          */
    /*******************************************************/
@@ -38,6 +38,8 @@
 /*                                                           */
 /*            Removed use of void pointers for specific      */
 /*            data structures.                               */
+/*                                                           */
+/*      7.00: Hash value stored with lexemes.                */
 /*                                                           */
 /*************************************************************/
 
@@ -87,7 +89,7 @@ void AtomicValuesToCode(
   const char *pathName,
   char *fileNameBuffer)
   {
-   unsigned int version; // TBD Necessary?
+   unsigned int version;
 
    SetAtomicValueIndices(theEnv,true);
 
@@ -184,6 +186,7 @@ static unsigned int SymbolHashNodesToCode(
 
          fprintf(fp,"%ld,1,0,0,%ld,",hashPtr->count + 1,i);
          PrintCString(fp,hashPtr->contents);
+         fprintf(fp,",%zuU",hashPtr->hv);
 
          count++;
          j++;

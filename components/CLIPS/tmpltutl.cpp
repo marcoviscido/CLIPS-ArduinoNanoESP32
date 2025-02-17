@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.41  12/04/22             */
+   /*            CLIPS Version 7.00  01/29/25             */
    /*                                                     */
    /*            DEFTEMPLATE UTILITIES MODULE             */
    /*******************************************************/
@@ -61,6 +61,18 @@
 /*            Used gensnprintf in place of gensprintf and.   */
 /*            sprintf.                                       */
 /*                                                           */
+/*      7.00: Data driven backward chaining.                 */
+/*                                                           */
+/*            Deftemplate inheritance.                       */
+/*                                                           */
+/*            Support for non-reactive fact patterns.        */
+/*                                                           */
+/*            Construct hashing for quick lookup.            */
+/*                                                           */
+/*            Support for certainty factors.                 */
+/*                                                           */
+/*            Support for named facts.                       */
+/*                                                           */
 /*************************************************************/
 
 #include "setup.h"
@@ -94,7 +106,7 @@
 /***************************************/
 
    static void                     PrintTemplateSlot(Environment *,const char *,struct templateSlot *,CLIPSValue *);
-   static struct templateSlot     *GetNextTemplateSlotToPrint(Environment *,struct fact *,struct templateSlot *,int *,int,const char *);
+   static struct templateSlot     *GetNextTemplateSlotToPrint(Environment *,struct fact *,struct templateSlot *,int *,int,CLIPSBitMap *);
 
 /********************************************************/
 /* InvalidDeftemplateSlotMessage: Generic error message */
@@ -244,7 +256,7 @@ void CheckTemplateFact(
       rv = ConstraintCheckDataObject(theEnv,&theData,slotPtr->constraints);
       if (rv != NO_VIOLATION)
         {
-         gensnprintf(thePlace,sizeof(thePlace),"fact f-%lld",theFact->factIndex);
+         snprintf(thePlace,sizeof(thePlace),"fact f-%lld",theFact->factIndex);
 
          PrintErrorID(theEnv,"CSTRNCHK",1,true);
          WriteString(theEnv,STDERR,"Slot value ");
@@ -384,7 +396,7 @@ static struct templateSlot *GetNextTemplateSlotToPrint(
   struct templateSlot *slotPtr,
   int *position,
   int ignoreDefaults,
-  const char *changeMap)
+  CLIPSBitMap *changeMap)
   {
    UDFValue tempDO;
    CLIPSValue *sublist;
@@ -400,7 +412,7 @@ static struct templateSlot *GetNextTemplateSlotToPrint(
 
    while (slotPtr != NULL)
      {
-      if ((changeMap != NULL) && (TestBitMap(changeMap,*position) == 0))
+      if ((changeMap != NULL) && (TestBitMap(changeMap->contents,*position) == 0))
         {
          (*position)++;
          slotPtr = slotPtr->next;
@@ -446,7 +458,7 @@ void PrintTemplateFact(
   Fact *theFact,
   bool separateLines,
   bool ignoreDefaults,
-  const char *changeMap)
+  CLIPSBitMap *changeMap)
   {
    CLIPSValue *sublist;
    int i;
@@ -606,26 +618,37 @@ Deftemplate *CreateImpliedDeftemplate(
    newDeftemplate->header.usrData = NULL;
    newDeftemplate->header.constructType = DEFTEMPLATE;
    newDeftemplate->header.env = theEnv;
+   newDeftemplate->parent = NULL;
+   newDeftemplate->child = NULL;
+   newDeftemplate->sibling = NULL;
    newDeftemplate->slotList = NULL;
    newDeftemplate->implied = setFlag;
    newDeftemplate->numberOfSlots = 0;
    newDeftemplate->inScope = 1;
+   newDeftemplate->cfd = 0;
+   newDeftemplate->named = 0;
    newDeftemplate->patternNetwork = NULL;
+   newDeftemplate->goalNetwork = NULL;
    newDeftemplate->factList = NULL;
    newDeftemplate->lastFact = NULL;
    newDeftemplate->busyCount = 0;
-   newDeftemplate->watch = false;
+   newDeftemplate->watchFacts = false;
+   newDeftemplate->watchGoals = false;
    newDeftemplate->header.next = NULL;
 
 #if DEBUGGING_FUNCTIONS
    if (GetWatchItem(theEnv,"facts") == 1)
-     { DeftemplateSetWatch(newDeftemplate,true); }
+     { DeftemplateSetWatchFacts(newDeftemplate,true); }
+
+   if (GetWatchItem(theEnv,"goals") == 1)
+     { DeftemplateSetWatchGoals(newDeftemplate,true); }
 #endif
 
    newDeftemplate->header.whichModule = (struct defmoduleItemHeader *)
                                         GetModuleItem(theEnv,NULL,DeftemplateData(theEnv)->DeftemplateModuleIndex);
 
    AddConstructToModule(&newDeftemplate->header);
+   AddConstructToHashMap(theEnv,&newDeftemplate->header,newDeftemplate->header.whichModule);
    InstallDeftemplate(theEnv,newDeftemplate);
 
    return(newDeftemplate);

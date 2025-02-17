@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.40  02/03/21             */
+   /*            CLIPS Version 7.00  07/03/24             */
    /*                                                     */
    /*                                                     */
    /*******************************************************/
@@ -57,6 +57,9 @@
 /*            Generic error message no longer printed when    */
 /*            an alternate variable handling function         */
 /*            generates an error.                             */
+/*                                                            */
+/*      7.00: Support for ?var:slot references to facts in    */
+/*            methods and rule actions.                       */
 /*                                                            */
 /**************************************************************/
 
@@ -118,8 +121,6 @@ typedef struct
 
 #if (! BLOAD_ONLY) && (! RUN_TIME)
    static unsigned int            FindProcParameter(CLIPSLexeme *,Expression *,CLIPSLexeme *);
-   static bool                    ReplaceProcBinds(Environment *,Expression *,
-                                                   int (*)(Environment *,Expression *,void *),void *);
    static Expression             *CompactActions(Environment *,Expression *);
 #endif
 
@@ -619,7 +620,7 @@ int ReplaceProcVars(
             Replace the call to "bind" with a call to PROC_BIND - the
             special internal function for procedure local variables.
             ==================================================================== */
-         if ((actions->value == (void *) FindFunction(theEnv,"bind")) &&
+         if ((actions->functionValue == FindFunction(theEnv,"bind")) &&
              (actions->argList->type == SYMBOL_TYPE))
            {
             actions->type = PROC_BIND;
@@ -850,7 +851,7 @@ Expression *GetProcParamExpressions(
                gm2(theEnv,(sizeof(Expression) * ProceduralPrimitiveData(theEnv)->ProcParamArraySize));
    for (i = 0 ; i < ProceduralPrimitiveData(theEnv)->ProcParamArraySize ; i++)
      {
-      ProceduralPrimitiveData(theEnv)->ProcParamExpressions[i].type = ProceduralPrimitiveData(theEnv)->ProcParamArray[i].header->type; // TBD Remove
+      ProceduralPrimitiveData(theEnv)->ProcParamExpressions[i].type = ProceduralPrimitiveData(theEnv)->ProcParamArray[i].header->type;
       if (ProceduralPrimitiveData(theEnv)->ProcParamArray[i].header->type != MULTIFIELD_TYPE)
         ProceduralPrimitiveData(theEnv)->ProcParamExpressions[i].value = ProceduralPrimitiveData(theEnv)->ProcParamArray[i].value;
       else
@@ -1372,7 +1373,7 @@ static unsigned int FindProcParameter(
                   special binds and remove the names from the parsed
                   bind list)
  *************************************************************************/
-static bool ReplaceProcBinds(
+bool ReplaceProcBinds(
   Environment *theEnv,
   Expression *actions,
   int (*altbindfunc)(Environment *,Expression *,void *),
@@ -1387,7 +1388,7 @@ static bool ReplaceProcBinds(
         {
          if (ReplaceProcBinds(theEnv,actions->argList,altbindfunc,userBuffer))
            return true;
-         if ((actions->value == (void *) FindFunction(theEnv,"bind")) &&
+         if ((actions->functionValue == FindFunction(theEnv,"bind")) &&
              (actions->argList->type == SYMBOL_TYPE))
            {
             bname = actions->argList->lexemeValue;
@@ -1439,6 +1440,37 @@ static Expression *CompactActions(
    return(actions);
   }
 
+/****************************************************************************
+  NAME         : BindSlotReferenceDefault
+  DESCRIPTION  : Check for ?var:slot references in the bind function and
+                 generates an error if found.
+  INPUTS       : 1) Variable expression
+                 2) The class for the message-handler being parsed
+  RETURNS      : 0 if not recognized, 1 if so, -1 on errors
+  SIDE EFFECTS : Handler body "bind" call replaced with  direct slot access
+                   function
+  NOTES        : Objects are allowed to directly access their own slots
+                 without sending a message to themselves.  Since the object
+                 is "within the boundary of its internals", this does not
+                 violate the encapsulation principle of OOP.
+ ****************************************************************************/
+int BindSlotReferenceDefault(
+  Environment *theEnv,
+  Expression *bindExp,
+  void *userBuffer)
+  {
+   const char *bindName;
+   bindName = bindExp->argList->lexemeValue->contents;
+     
+   if (strchr(bindName,':') != NULL)
+     {
+      BindVarSlotErrorMessage(theEnv,bindName);
+      return -1;
+     }
+
+   return 0;
+  }
+  
 #endif
 
 #if (! DEFFUNCTION_CONSTRUCT) || (! DEFGENERIC_CONSTRUCT)

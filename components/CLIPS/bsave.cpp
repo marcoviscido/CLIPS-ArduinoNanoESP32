@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.40  10/04/17             */
+   /*            CLIPS Version 7.00  02/05/25             */
    /*                                                     */
    /*                     BSAVE MODULE                    */
    /*******************************************************/
@@ -232,7 +232,8 @@ bool Bsave(
      {
       if (biPtr->bsaveStorageFunction != NULL)
         {
-         genstrncpy(constructBuffer,biPtr->name,CONSTRUCT_HEADER_SIZE);
+         constructBuffer[0] = EOS;
+         genstrncat(constructBuffer,biPtr->name,CONSTRUCT_HEADER_SIZE-1);
          GenWrite(constructBuffer,CONSTRUCT_HEADER_SIZE,fp);
          (*biPtr->bsaveStorageFunction)(theEnv,fp);
         }
@@ -270,7 +271,8 @@ bool Bsave(
      {
       if (biPtr->bsaveFunction != NULL)
         {
-         genstrncpy(constructBuffer,biPtr->name,CONSTRUCT_HEADER_SIZE);
+         constructBuffer[0] = EOS;
+         genstrncat(constructBuffer,biPtr->name,CONSTRUCT_HEADER_SIZE-1);
          GenWrite(constructBuffer,CONSTRUCT_HEADER_SIZE,fp);
          (*biPtr->bsaveFunction)(theEnv,fp);
         }
@@ -491,6 +493,7 @@ void MarkNeededItems(
             break;
 
          case INTEGER_TYPE:
+         case QUANTITY_TYPE:
             testPtr->integerValue->neededInteger = true;
             break;
 
@@ -504,7 +507,7 @@ void MarkNeededItems(
          default:
            if (EvaluationData(theEnv)->PrimitivesArray[testPtr->type] == NULL) break;
            if (EvaluationData(theEnv)->PrimitivesArray[testPtr->type]->bitMap)
-             { ((CLIPSBitMap *) testPtr->value)->neededBitMap = true; }
+             { testPtr->bitMapValue->neededBitMap = true; }
            break;
 
         }
@@ -539,7 +542,8 @@ static void WriteBinaryFooter(
   {
    char footerBuffer[CONSTRUCT_HEADER_SIZE];
 
-   genstrncpy(footerBuffer,BloadData(theEnv)->BinaryPrefixID,CONSTRUCT_HEADER_SIZE);
+   footerBuffer[0] = EOS;
+   genstrncat(footerBuffer,BloadData(theEnv)->BinaryPrefixID,CONSTRUCT_HEADER_SIZE-1);
    GenWrite(footerBuffer,CONSTRUCT_HEADER_SIZE,fp);
   }
 

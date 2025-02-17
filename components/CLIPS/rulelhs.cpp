@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.40  08/25/16             */
+   /*            CLIPS Version 7.00  10/15/24             */
    /*                                                     */
    /*             DEFRULE LHS PARSING MODULE              */
    /*******************************************************/
@@ -31,6 +31,13 @@
 /*            data structures.                               */
 /*                                                           */
 /*            UDF redesign.                                  */
+/*                                                           */
+/*      7.00: Support for data driven backward chaining.     */
+/*                                                           */
+/*            Support for certainty factors.                 */
+/*                                                           */
+/*            Removed the restriction of using pattern       */
+/*            address within a not conditional element.      */
 /*                                                           */
 /*************************************************************/
 
@@ -76,6 +83,7 @@
    static void                    TagLHSLogicalNodes(struct lhsParseNode *);
    static struct lhsParseNode    *SimplePatternParse(Environment *,const char *,struct token *,bool *);
    static void                    ParseSalience(Environment *,const char *,const char *,bool *);
+   static void                    ParseCertainty(Environment *,const char *,const char *,bool *);
    static void                    ParseAutoFocus(Environment *,const char *,bool *);
 
 /*******************************************************************/
@@ -101,6 +109,7 @@ struct lhsParseNode *ParseRuleLHS(
 
    PatternData(theEnv)->GlobalSalience = 0;
    PatternData(theEnv)->GlobalAutoFocus = false;
+   PatternData(theEnv)->GlobalCertainty = 100;
    PatternData(theEnv)->SalienceExpression = NULL;
 
    /*============================*/
@@ -226,7 +235,7 @@ static void DeclarationParse(
    struct token theToken;
    struct expr *packPtr;
    bool notDone = true;
-   bool salienceParsed = false, autoFocusParsed = false;
+   bool salienceParsed = false, autoFocusParsed = false, certaintyParsed = false;
 
    /*===========================*/
    /* Next token must be a '('. */
@@ -278,6 +287,24 @@ static void DeclarationParse(
            }
         }
 
+      /*===============================================*/
+      /* Parse a certainty declaration if encountered. */
+      /*===============================================*/
+
+      else if (strcmp(theToken.lexemeValue->contents,"certainty") == 0)
+        {
+         if (certaintyParsed)
+           {
+            AlreadyParsedErrorMessage(theEnv,"certainty declaration",NULL);
+            *error = true;
+           }
+         else
+           {
+            ParseCertainty(theEnv,readSource,ruleName,error);
+            certaintyParsed = true;
+           }
+        }
+        
       /*=================================================*/
       /* Parse an auto-focus declaration if encountered. */
       /* A global flag is used to indicate if the        */
@@ -440,6 +467,51 @@ static void ParseSalience(
      }
 
    PatternData(theEnv)->GlobalSalience = salience;
+  }
+
+/*************************************************************/
+/* ParseCertainty: Parses the rest of a defrule certainty    */
+/*   declaration once the certainty keyword has been parsed. */
+/*************************************************************/
+static void ParseCertainty(
+  Environment *theEnv,
+  const char *readSource,
+  const char *ruleName,
+  bool *error)
+  {
+   long long certainty;
+   struct token theToken;
+
+   /*=========================================*/
+   /* The certainty value must be an integer. */
+   /*=========================================*/
+
+   SavePPBuffer(theEnv," ");
+
+   GetToken(theEnv,readSource,&theToken);
+   if (theToken.tknType != INTEGER_TOKEN)
+     {
+      PrintErrorID(theEnv,"RULELHS",4,true);
+      WriteString(theEnv,STDERR,"The certainty factor for a rule must be an integer.\n");
+      *error = true;
+      return;
+     }
+
+   /*===================================================*/
+   /* Certainty value must be in the range -100 to 100. */
+   /*===================================================*/
+
+   certainty = theToken.integerValue->contents;
+
+   if ((certainty > 100) || (certainty < -100))
+     {
+      PrintErrorID(theEnv,"RULELHS",5,true);
+      WriteString(theEnv,STDERR,"The certainty factor for a rule must be in the range of -100 to 100.\n");
+      *error = true;
+      return;
+     }
+     
+   PatternData(theEnv)->GlobalCertainty = (short) certainty;
   }
 
 /**************************************************************/
@@ -1029,18 +1101,6 @@ static struct lhsParseNode *AssignmentParse(
    struct lhsParseNode *theNode;
    struct token theToken;
 
-   /*=====================================================*/
-   /* Patterns cannot be bound if they are with a not CE. */
-   /*=====================================================*/
-
-   if (PatternData(theEnv)->WithinNotCE)
-     {
-      PrintErrorID(theEnv,"RULELHS",2,true);
-      WriteString(theEnv,STDERR,"A pattern CE cannot be bound to a pattern-address within a not CE\n");
-      *error = true;
-      return NULL;
-     }
-
    /*===============================================*/
    /* Check for binder token, "<-", after variable. */
    /*===============================================*/
@@ -1177,6 +1237,12 @@ static struct lhsParseNode *SimplePatternParse(
             ReturnLHSParseNodes(theEnv,theNode);
             return NULL;
            }
+           
+         if (theNode->right->goalCE)
+           { theNode->goalCE = true; }
+
+         if (theNode->right->explicitCE)
+           { theNode->explicitCE = true; }
 
          PropagatePatternType(theNode,tempParser);
          return(theNode);

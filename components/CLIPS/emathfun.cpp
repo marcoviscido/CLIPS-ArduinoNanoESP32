@@ -59,7 +59,6 @@
 /*                                                           */
 /*************************************************************/
 
-#include <climits>
 #include "setup.h"
 #include "argacces.h"
 #include "envrnmnt.h"

@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*             CLIPS Version 6.40  07/23/20            */
+   /*             CLIPS Version 7.00  12/06/24            */
    /*                                                     */
    /*          PROCEDURAL FUNCTIONS HEADER FILE           */
    /*******************************************************/
@@ -45,6 +45,10 @@
 /*                                                           */
 /*            UDF redesign.                                  */
 /*                                                           */
+/*      6.42: Added try function.                            */
+/*                                                           */
+/*      7.00: Added inline if function.                      */
+/*                                                           */
 /*************************************************************/
 
 #ifndef _H_prcdrfun
@@ -78,11 +82,13 @@ struct procedureFunctionData
    void                           LoopForCountFunction(Environment *,UDFContext *,UDFValue *);
    void                           GetLoopCount(Environment *,UDFContext *,UDFValue *);
    void                           IfFunction(Environment *,UDFContext *,UDFValue *);
+   void                           IifFunction(Environment *,UDFContext *,UDFValue *);
    void                           BindFunction(Environment *,UDFContext *,UDFValue *);
    void                           PrognFunction(Environment *,UDFContext *,UDFValue *);
    void                           ReturnFunction(Environment *,UDFContext *,UDFValue *);
    void                           BreakFunction(Environment *,UDFContext *,UDFValue *);
    void                           SwitchFunction(Environment *,UDFContext *,UDFValue *);
+   void                           TryFunction(Environment *,UDFContext *,UDFValue *);
    bool                           GetBoundVariable(Environment *,UDFValue *,CLIPSLexeme *);
    void                           FlushBindList(Environment *,void *);
 

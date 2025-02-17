@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.40  02/03/21             */
+   /*            CLIPS Version 7.00  02/05/25             */
    /*                                                     */
    /*                   UTILITY MODULE                    */
    /*******************************************************/
@@ -72,6 +72,11 @@
 /*            Moved BufferedRead and FreeReadBuffer from     */
 /*            insfile.c to utility.c                         */
 /*                                                           */
+/*      6.42: Fixed GC bug by including garbage fact and     */
+/*            instances in the GC frame.                     */
+/*                                                           */
+/*      7.00: Support for data driven backward chaining.     */
+/*                                                           */
 /*************************************************************/
 
 #include "setup.h"
@@ -86,6 +91,7 @@
 #include "evaluatn.h"
 #include "factmngr.h"
 #include "facthsh.h"
+#include "insfun.h"
 #include "memalloc.h"
 #include "multifld.h"
 #include "prntutil.h"
@@ -134,6 +140,12 @@ static void DeallocateUtilityData(
    struct garbageFrame *theGarbageFrame;
    struct ephemeron *edPtr, *nextEDPtr;
    Multifield *tmpMFPtr, *nextMFPtr;
+#if DEFTEMPLATE_CONSTRUCT
+   Fact *tmpFactPtr, *nextFactPtr;
+#endif
+#if OBJECT_SYSTEM
+   IGARBAGE *tmpGPtr, *nextGPtr;
+#endif
 
    /*======================*/
    /* Free tracked memory. */
@@ -221,7 +233,36 @@ static void DeallocateUtilityData(
          tmpMFPtr = nextMFPtr;
         }
 
-      UtilityData(theEnv)->CurrentGarbageFrame = UtilityData(theEnv)->CurrentGarbageFrame->priorFrame;
+      /*============================*/
+      /* Free up fact garbage data. */
+      /*============================*/
+   
+#if DEFTEMPLATE_CONSTRUCT
+      tmpFactPtr = theGarbageFrame->GarbageFacts;
+      while (tmpFactPtr != NULL)
+        {
+         nextFactPtr = tmpFactPtr->nextFact;
+         ReturnFact(theEnv,tmpFactPtr);
+         tmpFactPtr = nextFactPtr;
+        }
+#endif
+
+      /*================================*/
+      /* Free up instance garbage data. */
+      /*================================*/
+
+#if OBJECT_SYSTEM
+      tmpGPtr = theGarbageFrame->GarbageInstances;
+      while (tmpGPtr != NULL)
+        {
+         nextGPtr = tmpGPtr->nxt;
+         rtn_struct(theEnv,instance,tmpGPtr->ins);
+         rtn_struct(theEnv,igarbage,tmpGPtr);
+         tmpGPtr = nextGPtr;
+        }
+#endif
+
+      UtilityData(theEnv)->CurrentGarbageFrame = theGarbageFrame->priorFrame;
      }
   }
 
@@ -241,6 +282,12 @@ void CleanCurrentGarbageFrame(
    if (returnValue != NULL)
      { RetainUDFV(theEnv,returnValue); }
 
+#if DEFTEMPLATE_CONSTRUCT
+   RemoveGarbageFacts(theEnv);
+#endif
+#if OBJECT_SYSTEM
+   CleanupInstances(theEnv);
+#endif
    CallCleanupFunctions(theEnv);
    RemoveEphemeralAtoms(theEnv);
    FlushMultifields(theEnv);
@@ -253,6 +300,12 @@ void CleanCurrentGarbageFrame(
        (currentGarbageFrame->ephemeralSymbolList == NULL) &&
        (currentGarbageFrame->ephemeralBitMapList == NULL) &&
        (currentGarbageFrame->ephemeralExternalAddressList == NULL) &&
+#if DEFTEMPLATE_CONSTRUCT
+       (currentGarbageFrame->LastGarbageFact == NULL) &&
+#endif
+#if OBJECT_SYSTEM
+       (currentGarbageFrame->LastGarbageInstance == NULL) &&
+#endif
        (currentGarbageFrame->LastMultifield == NULL))
      { currentGarbageFrame->dirty = false; }
   }
@@ -269,6 +322,14 @@ void RestorePriorGarbageFrame(
    if (newGarbageFrame->dirty)
      {
       if (returnValue != NULL) RetainUDFV(theEnv,returnValue);
+      
+#if DEFTEMPLATE_CONSTRUCT
+      RemoveGarbageFacts(theEnv);
+#endif
+#if OBJECT_SYSTEM
+      CleanupInstances(theEnv);
+#endif
+
       CallCleanupFunctions(theEnv);
       RemoveEphemeralAtoms(theEnv);
       FlushMultifields(theEnv);
@@ -288,6 +349,32 @@ void RestorePriorGarbageFrame(
          oldGarbageFrame->LastMultifield = newGarbageFrame->LastMultifield;
          oldGarbageFrame->dirty = true;
         }
+
+#if DEFTEMPLATE_CONSTRUCT
+      if (newGarbageFrame->GarbageFacts != NULL)
+        {
+         if (oldGarbageFrame->GarbageFacts == NULL)
+           { oldGarbageFrame->GarbageFacts = newGarbageFrame->GarbageFacts; }
+         else
+           { oldGarbageFrame->LastGarbageFact->nextFact = newGarbageFrame->GarbageFacts; }
+
+         oldGarbageFrame->LastGarbageFact = newGarbageFrame->LastGarbageFact;
+         oldGarbageFrame->dirty = true;
+        }
+#endif
+
+#if OBJECT_SYSTEM
+      if (newGarbageFrame->GarbageInstances != NULL)
+        {
+         if (oldGarbageFrame->GarbageInstances == NULL)
+           { oldGarbageFrame->GarbageInstances = newGarbageFrame->GarbageInstances; }
+         else
+           { oldGarbageFrame->LastGarbageInstance->nxt = newGarbageFrame->GarbageInstances; }
+
+         oldGarbageFrame->LastGarbageInstance = newGarbageFrame->LastGarbageInstance;
+         oldGarbageFrame->dirty = true;
+        }
+#endif
 
       if (returnValue != NULL) ReleaseUDFV(theEnv,returnValue);
      }
@@ -378,23 +465,6 @@ void CallPeriodicTasks(
      }
   }
 
-/**************************************************/
-/* CallStartingTasks: Calls the list of functions */
-/*   for handling starting tasks.                 */
-/**************************************************/
-  void CallStartingTasks(
-      Environment *theEnv)
-  {
-    struct voidCallFunctionItem *periodPtr;
-
-    for (periodPtr = UtilityData(theEnv)->ListOfStartingFunctions;
-         periodPtr != NULL;
-         periodPtr = periodPtr->next)
-    {
-      (*periodPtr->func)(theEnv, periodPtr->context);
-    }
-  }
-
 /***************************************************/
 /* AddCleanupFunction: Adds a function to the list */
 /*   of functions called to perform cleanup such   */
@@ -427,23 +497,6 @@ bool AddPeriodicFunction(
    UtilityData(theEnv)->ListOfPeriodicFunctions =
      AddVoidFunctionToCallList(theEnv,name,priority,theFunction,
                            UtilityData(theEnv)->ListOfPeriodicFunctions,context);
-   return true;
-  }
-
-/****************************************************/
-/* AddStartingFunction: Adds a function to the list */
-/*   of functions called to handle starting tasks.  */
-/****************************************************/
-bool AddStartingFunction(
-  Environment *theEnv,
-  const char *name,
-  VoidCallFunction *theFunction,
-  int priority,
-  void *context)
-  {
-   UtilityData(theEnv)->ListOfStartingFunctions =
-     AddVoidFunctionToCallList(theEnv,name,priority,theFunction,
-                           UtilityData(theEnv)->ListOfStartingFunctions,context);
    return true;
   }
 
@@ -726,6 +779,7 @@ char *AppendNToString(
   {
    size_t lengthWithEOS;
    size_t newSize;
+   char *dest;
 
    /*====================================*/
    /* Determine the number of characters */
@@ -761,15 +815,16 @@ char *AppendNToString(
    /* string to the expanded string.   */
    /*==================================*/
 
-   genstrncpy(&oldStr[*oldPos],appendStr,length);
+   dest = &oldStr[*oldPos];
+   dest[0] = EOS;
+   genstrncat(&oldStr[*oldPos],appendStr,length);
    *oldPos += (lengthWithEOS - 1);
-   oldStr[*oldPos] = '\0';
 
    /*============================================================*/
    /* Return the expanded string containing the appended string. */
    /*============================================================*/
 
-   return(oldStr);
+   return oldStr;
   }
 
 /*******************************************************/
@@ -1220,6 +1275,8 @@ size_t ItemHashValue(
         return HashFloat(((CLIPSFloat *) theValue)->contents,theRange);
 
       case INTEGER_TYPE:
+      case UQV_TYPE:
+      case QUANTITY_TYPE:
         return HashInteger(((CLIPSInteger *) theValue)->contents,theRange);
 
       case SYMBOL_TYPE:
@@ -1623,6 +1680,69 @@ void FreeReadBuffer(
       genfree(theEnv,UtilityData(theEnv)->CurrentReadBuffer,UtilityData(theEnv)->CurrentReadBufferSize);
       UtilityData(theEnv)->CurrentReadBuffer = NULL;
       UtilityData(theEnv)->CurrentReadBufferSize = 0L;
-      UtilityData(theEnv)->CurrentReadBufferOffset = 0L; // TBD Added
+      UtilityData(theEnv)->CurrentReadBufferOffset = 0L;
      }
+  }
+  
+/***********/
+/* isPrime */
+/***********/
+bool IsPrime(
+  size_t n)
+  {
+   size_t i;
+
+   if (n <= 1)
+     { return false; }
+
+   if (n <= 3)
+     { return true; }
+      
+   if (((n % 2) == 0) ||
+       ((n % 3) == 0))
+     { return false; }
+
+   for (i = 5; i * i <= n; i += 6)
+     {
+      if (((n % i) == 0) ||
+          ((n % (i + 2)) == 0))
+        { return false; }
+     }
+   
+   return true;
+  }
+  
+/********************/
+/* IncreaseHashSize */
+/********************/
+size_t IncreaseHashSize(
+  size_t currentSize,
+  size_t initialSize)
+  {
+   if (currentSize == 0)
+     { return initialSize; }
+
+   currentSize = (currentSize * 2) + 1;
+   
+   while (! IsPrime(currentSize))
+     { currentSize++; }
+   
+   return currentSize;
+  }
+
+/*********************/
+/* DecreaseHashSize: */
+/*********************/
+size_t DecreaseHashSize(
+  size_t currentSize)
+  {
+   if (currentSize == 0)
+     { return 0; }
+ 
+   currentSize = currentSize / 2;
+   
+   while (! IsPrime(currentSize))
+     { currentSize++; }
+   
+   return currentSize;
   }

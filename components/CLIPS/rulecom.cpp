@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.41  12/04/22             */
+   /*            CLIPS Version 7.00  01/29/25             */
    /*                                                     */
    /*                RULE COMMANDS MODULE                 */
    /*******************************************************/
@@ -74,6 +74,8 @@
 /*      6.41: Used gensnprintf in place of gensprintf and.   */
 /*            sprintf.                                       */
 /*                                                           */
+/*      7.00: Support for data driven backward chaining.     */
+/*                                                           */
 /*************************************************************/
 
 #include <stdio.h>
@@ -104,6 +106,10 @@
 #include "utility.h"
 #include "watch.h"
 
+#if DEFTEMPLATE_CONSTRUCT
+#include "factmngr.h"
+#endif
+
 #if BLOAD || BLOAD_AND_BSAVE || BLOAD_ONLY
 #include "rulebin.h"
 #endif
@@ -129,6 +135,10 @@
    static const char             *BetaHeaderString(Environment *,struct joinInformation *,long,long);
    static const char             *ActivityHeaderString(Environment *,struct joinInformation *,long,long);
    static void                    JoinActivityReset(Environment *,ConstructHeader *,void *);
+#if DEFTEMPLATE_CONSTRUCT
+   static void                    WhyTraversePatternNetwork(Environment *,struct factPatternNode *,struct fact *);
+   static void                    WhyListRules(Environment *,struct joinLink *);
+#endif
 #endif
 
 /****************************************************************/
@@ -157,6 +167,9 @@ void DefruleCommands(
    AddUDF(theEnv,"dependents","v",1,1,"infly",DependentsCommand,"DependentsCommand",NULL);
 
    AddUDF(theEnv,"timetag","l",1,1,"infly" ,TimetagFunction,"TimetagFunction",NULL);
+#if DEFTEMPLATE_CONSTRUCT
+   AddUDF(theEnv,"why","v",1,1,"l",WhyCommand,"WhyCommand",NULL);
+#endif
 #endif /* DEBUGGING_FUNCTIONS */
 
    AddUDF(theEnv,"get-beta-memory-resizing","b",0,0,NULL,GetBetaMemoryResizingCommand,"GetBetaMemoryResizingCommand",NULL);
@@ -848,7 +861,7 @@ static const char *BetaHeaderString(
 
       theInfo = &infoArray[startPosition];
 
-      gensnprintf(buffer,sizeof(buffer),"%d",theInfo->whichCE);
+      snprintf(buffer,sizeof(buffer),"%d",theInfo->whichCE);
       returnString = AppendStrings(theEnv,returnString,buffer);
 
       if (nestedCEs)
@@ -856,17 +869,17 @@ static const char *BetaHeaderString(
          if (theInfo->patternBegin == theInfo->patternEnd)
            {
             returnString = AppendStrings(theEnv,returnString," (P");
-            gensnprintf(buffer,sizeof(buffer),"%d",theInfo->patternBegin);
+            snprintf(buffer,sizeof(buffer),"%d",theInfo->patternBegin);
             returnString = AppendStrings(theEnv,returnString,buffer);
             returnString = AppendStrings(theEnv,returnString,")");
            }
          else
            {
             returnString = AppendStrings(theEnv,returnString," (P");
-            gensnprintf(buffer,sizeof(buffer),"%d",theInfo->patternBegin);
+            snprintf(buffer,sizeof(buffer),"%d",theInfo->patternBegin);
             returnString = AppendStrings(theEnv,returnString,buffer);
             returnString = AppendStrings(theEnv,returnString," - P");
-            gensnprintf(buffer,sizeof(buffer),"%d",theInfo->patternEnd);
+            snprintf(buffer,sizeof(buffer),"%d",theInfo->patternEnd);
             returnString = AppendStrings(theEnv,returnString,buffer);
             returnString = AppendStrings(theEnv,returnString,")");
            }
@@ -877,7 +890,7 @@ static const char *BetaHeaderString(
          theInfo = &infoArray[endPosition];
 
          returnString = AppendStrings(theEnv,returnString," - ");
-         gensnprintf(buffer,sizeof(buffer),"%d",theInfo->whichCE);
+         snprintf(buffer,sizeof(buffer),"%d",theInfo->whichCE);
          returnString = AppendStrings(theEnv,returnString,buffer);
 
          if (nestedCEs)
@@ -885,17 +898,17 @@ static const char *BetaHeaderString(
             if (theInfo->patternBegin == theInfo->patternEnd)
               {
                returnString = AppendStrings(theEnv,returnString," (P");
-               gensnprintf(buffer,sizeof(buffer),"%d",theInfo->patternBegin);
+               snprintf(buffer,sizeof(buffer),"%d",theInfo->patternBegin);
                returnString = AppendStrings(theEnv,returnString,buffer);
                returnString = AppendStrings(theEnv,returnString,")");
               }
             else
               {
                returnString = AppendStrings(theEnv,returnString," (P");
-               gensnprintf(buffer,sizeof(buffer),"%d",theInfo->patternBegin);
+               snprintf(buffer,sizeof(buffer),"%d",theInfo->patternBegin);
                returnString = AppendStrings(theEnv,returnString,buffer);
                returnString = AppendStrings(theEnv,returnString," - P");
-               gensnprintf(buffer,sizeof(buffer),"%d",theInfo->patternEnd);
+               snprintf(buffer,sizeof(buffer),"%d",theInfo->patternEnd);
                returnString = AppendStrings(theEnv,returnString,buffer);
                returnString = AppendStrings(theEnv,returnString,")");
               }
@@ -1151,7 +1164,7 @@ static const char *ActivityHeaderString(
       theJoin = theJoin->lastLevel;
      }
 
-   gensnprintf(buffer,sizeof(buffer),"%d",theInfo->whichCE);
+   snprintf(buffer,sizeof(buffer),"%d",theInfo->whichCE);
    returnString = AppendStrings(theEnv,returnString,buffer);
    if (nestedCEs == false)
      { return returnString; }
@@ -1159,7 +1172,7 @@ static const char *ActivityHeaderString(
    if (theInfo->patternBegin == theInfo->patternEnd)
      {
       returnString = AppendStrings(theEnv,returnString," (P");
-      gensnprintf(buffer,sizeof(buffer),"%d",theInfo->patternBegin);
+      snprintf(buffer,sizeof(buffer),"%d",theInfo->patternBegin);
       returnString = AppendStrings(theEnv,returnString,buffer);
 
       returnString = AppendStrings(theEnv,returnString,")");
@@ -1168,12 +1181,12 @@ static const char *ActivityHeaderString(
      {
       returnString = AppendStrings(theEnv,returnString," (P");
 
-      gensnprintf(buffer,sizeof(buffer),"%d",theInfo->patternBegin);
+      snprintf(buffer,sizeof(buffer),"%d",theInfo->patternBegin);
       returnString = AppendStrings(theEnv,returnString,buffer);
 
       returnString = AppendStrings(theEnv,returnString," - P");
 
-      gensnprintf(buffer,sizeof(buffer),"%d",theInfo->patternEnd);
+      snprintf(buffer,sizeof(buffer),"%d",theInfo->patternEnd);
       returnString = AppendStrings(theEnv,returnString,buffer);
 
       returnString = AppendStrings(theEnv,returnString,")");
@@ -1229,11 +1242,11 @@ static void ListBetaJoinActivity(
                      ActivityHeaderString(theEnv,infoArray,joinIndex,arraySize));
       WriteString(theEnv,STDOUT,"\n");
 
-      gensnprintf(buffer,sizeof(buffer),"   Compares: %10lld\n",compares);
+      snprintf(buffer,sizeof(buffer),"   Compares: %10lld\n",compares);
       WriteString(theEnv,STDOUT,buffer);
-      gensnprintf(buffer,sizeof(buffer),"   Adds:     %10lld\n",adds);
+      snprintf(buffer,sizeof(buffer),"   Adds:     %10lld\n",adds);
       WriteString(theEnv,STDOUT,buffer);
-      gensnprintf(buffer,sizeof(buffer),"   Deletes:  %10lld\n",deletes);
+      snprintf(buffer,sizeof(buffer),"   Deletes:  %10lld\n",deletes);
       WriteString(theEnv,STDOUT,buffer);
      }
    else if (output == SUCCINCT)
@@ -1321,6 +1334,145 @@ void TimetagFunction(
 
    returnValue->integerValue = CreateInteger(theEnv,(long long) ((struct patternEntity *) ptr)->timeTag);
   }
+
+#if DEFTEMPLATE_CONSTRUCT
+/**********************************/
+/* WhyCommand: H/L access routine */
+/*   for the why command.         */
+/**********************************/
+void WhyCommand(
+  Environment *theEnv,
+  UDFContext *context,
+  UDFValue *returnValue)
+  {
+   UDFValue theArg;
+   long long goalIndex;
+   Fact *theGoal;
+   
+   /*=========================================*/
+   /* This function expects a single argument */
+   /* which must be an integer.               */
+   /*=========================================*/
+
+   if (! UDFFirstArgument(context,INTEGER_BIT,&theArg))
+     { return; }
+     
+   /*==========================================*/
+   /* A goal index must be a positive integer. */
+   /*==========================================*/
+
+   goalIndex = theArg.integerValue->contents;
+   if (goalIndex < 1)
+     {
+      UDFInvalidArgumentMessage(context,"goal-index");
+      return;
+     }
+
+   /*================================================*/
+   /* See if a goal with the specified index exists. */
+   /*================================================*/
+
+   theGoal = FindIndexedGoal(theEnv,goalIndex);
+   if (theGoal == NULL)
+     {
+      char tempBuffer[20];
+      snprintf(tempBuffer,sizeof(tempBuffer),"g-%lld",goalIndex);
+      CantFindItemErrorMessage(theEnv,"goal",tempBuffer,false);
+      return;
+     }
+     
+   /* */
+   
+   WhyTraversePatternNetwork(theEnv,theGoal->whichDeftemplate->patternNetwork,theGoal);
+   
+#if DEVELOPER
+   WriteString(theEnv,STDOUT,"Goal support count is ");
+   WriteInteger(theEnv,STDOUT,theGoal->supportCount);
+   WriteString(theEnv,STDOUT,"\n");
+#endif
+  }
+  
+/*****************************/
+/* WhyTraversePatternNetwork */
+/*****************************/
+static void WhyTraversePatternNetwork(
+  Environment *theEnv,
+  struct factPatternNode *theNode,
+  Fact *theGoal)
+  {
+   struct joinNode *theJoin;
+   struct partialMatch *listOfMatches;
+   unsigned long b;
+   struct betaMemory *theMemory;
+   
+   while (theNode != NULL)
+     {
+      for (theJoin = theNode->header.entryJoin; theJoin != NULL; theJoin = theJoin->rightMatchNode)
+        {
+         if (theJoin->goalExpression == NULL) continue;
+
+         if (theJoin->firstJoin)
+           {
+            if (theJoin->leftMemory->beta[0]->marker == theGoal)
+              {
+               WhyListRules(theEnv,theJoin->nextLinks);
+               WriteString(theEnv,STDOUT,"   *\n");
+              }
+           }
+         else
+           {
+            theMemory = theJoin->leftMemory;
+
+            for (b = 0; b < theMemory->size; b++)
+              {
+               listOfMatches = theMemory->beta[b];
+               while (listOfMatches != NULL)
+                 {
+                  if (listOfMatches->marker == theGoal)
+                    {
+                     WhyListRules(theEnv,theJoin->nextLinks);
+                     WriteString(theEnv,STDOUT,"   ");
+                     PrintPartialMatch(theEnv,STDOUT,listOfMatches);
+                     WriteString(theEnv,STDOUT,"\n");
+                    }
+                    
+                  listOfMatches = listOfMatches->nextInMemory;
+                 }
+              }
+           }
+        }
+        
+      WhyTraversePatternNetwork(theEnv,theNode->nextLevel,theGoal);
+      theNode = theNode->rightNode;
+     }
+  }
+  
+/****************/
+/* WhyListRules */
+/****************/
+static void WhyListRules(
+  Environment *theEnv,
+  struct joinLink *nextJoins)
+  {
+   struct joinNode *theJoin;
+   
+   while (nextJoins != NULL)
+     {
+      theJoin = nextJoins->join;
+      
+      if (theJoin->ruleToActivate != NULL)
+        {
+         WriteString(theEnv,STDOUT,DefruleName(theJoin->ruleToActivate));
+         WriteString(theEnv,STDOUT,":\n");
+        }
+      
+      WhyListRules(theEnv,theJoin->nextLinks);
+      
+      nextJoins = nextJoins->next;
+     }
+  }
+
+#endif
 
 #endif /* DEBUGGING_FUNCTIONS */
 
@@ -1453,11 +1605,13 @@ static void ShowJoins(
          else
            { rhsType = ' '; }
 
-         gensnprintf(buffer,sizeof(buffer),"%2hu%c%c%c%c : ",joinList[numberOfJoins]->depth,
+         snprintf(buffer,sizeof(buffer),"%2hu%c%c%c%c%c%c : ",joinList[numberOfJoins]->depth,
                                      (joinList[numberOfJoins]->firstJoin) ? 'f' : ' ',
                                      rhsType,
                                      (joinList[numberOfJoins]->joinFromTheRight) ? 'j' : ' ',
-                                     (joinList[numberOfJoins]->logicalJoin) ? 'l' : ' ');
+                                     (joinList[numberOfJoins]->logicalJoin) ? 'l' : ' ',
+                                     (joinList[numberOfJoins]->goalJoin) ? 'g' : ' ',
+                                     (joinList[numberOfJoins]->explicitJoin) ? 'x' : ' ');
          WriteString(theEnv,STDOUT,buffer);
          PrintExpression(theEnv,STDOUT,joinList[numberOfJoins]->networkTest);
          WriteString(theEnv,STDOUT,"\n");
@@ -1498,7 +1652,7 @@ static void ShowJoins(
               { WriteString(theEnv,STDOUT,"None\n"); }
             else
               {
-               gensnprintf(buffer,sizeof(buffer),"%lu\n",count);
+               snprintf(buffer,sizeof(buffer),"%lu\n",count);
                WriteString(theEnv,STDOUT,buffer);
               }
            }
@@ -1511,7 +1665,7 @@ static void ShowJoins(
               { WriteString(theEnv,STDOUT,"None\n"); }
             else
               {
-               gensnprintf(buffer,sizeof(buffer),"%lu\n",count);
+               snprintf(buffer,sizeof(buffer),"%lu\n",count);
                WriteString(theEnv,STDOUT,buffer);
               }
            }
@@ -1553,7 +1707,7 @@ void ShowAlphaHashTable(
        if (count != 0)
          {
           totalCount += count;
-          gensnprintf(buffer,sizeof(buffer),"%4d: %4d ->",i,count);
+          snprintf(buffer,sizeof(buffer),"%4d: %4d ->",i,count);
           WriteString(theEnv,STDOUT,buffer);
 
           for (theEntry =  DefruleData(theEnv)->AlphaMemoryTable[i], count = 0;
@@ -1565,7 +1719,7 @@ void ShowAlphaHashTable(
                   theMatch = theMatch->nextInMemory)
                { count++; }
 
-             gensnprintf(buffer,sizeof(buffer)," %4d",count);
+             snprintf(buffer,sizeof(buffer)," %4d",count);
              WriteString(theEnv,STDOUT,buffer);
              if (theEntry->owner->rightHash == NULL)
                { WriteString(theEnv,STDOUT,"*"); }
@@ -1574,7 +1728,7 @@ void ShowAlphaHashTable(
           WriteString(theEnv,STDOUT,"\n");
          }
       }
-    gensnprintf(buffer,sizeof(buffer),"Total Count: %ld\n",totalCount);
+    snprintf(buffer,sizeof(buffer),"Total Count: %ld\n",totalCount);
     WriteString(theEnv,STDOUT,buffer);
    }
 

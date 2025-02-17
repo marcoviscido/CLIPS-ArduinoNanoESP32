@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.40  07/23/20             */
+   /*            CLIPS Version 7.00  09/18/24             */
    /*                                                     */
    /*                 SYMBOL BSAVE MODULE                 */
    /*******************************************************/
@@ -35,7 +35,7 @@
 
 #include "setup.h"
 
-#if BLOAD || BLOAD_ONLY || BLOAD_AND_BSAVE || BLOAD_INSTANCES || BSAVE_INSTANCES
+#if BLOAD || BLOAD_ONLY || BLOAD_AND_BSAVE || BLOAD_INSTANCES || BSAVE_INSTANCES || DEFTEMPLATE_CONSTRUCT
 
 #include "argacces.h"
 #include "bload.h"
@@ -54,11 +54,11 @@
 /***************************************/
 
    static void                        ReadNeededBitMaps(Environment *);
-#if BLOAD_AND_BSAVE || BSAVE_INSTANCES
+#if BLOAD_AND_BSAVE || BSAVE_INSTANCES || DEFTEMPLATE_CONSTRUCT
    static void                        WriteNeededBitMaps(Environment *,FILE *);
 #endif
 
-#if BLOAD_AND_BSAVE || BSAVE_INSTANCES
+#if BLOAD_AND_BSAVE || BSAVE_INSTANCES || DEFTEMPLATE_CONSTRUCT
 
 /**********************************************/
 /* WriteNeededAtomicValues: Save all symbols, */
@@ -607,7 +607,7 @@ static void ReadNeededBitMaps(
    for (i = 0; i < SymbolData(theEnv)->NumberOfBitMaps; i++)
      {
       tempSize = (unsigned short *) bitMapPtr;
-      SymbolData(theEnv)->BitMapArray[i] = (CLIPSBitMap *) AddBitMap(theEnv,bitMapPtr+sizeof(unsigned short),*tempSize);
+      SymbolData(theEnv)->BitMapArray[i] = AddBitMap(theEnv,bitMapPtr+sizeof(unsigned short),*tempSize);
       bitMapPtr += *tempSize + sizeof(unsigned short);
      }
 

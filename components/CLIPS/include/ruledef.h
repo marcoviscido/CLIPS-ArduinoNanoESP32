@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*             CLIPS Version 6.40  02/19/20            */
+   /*             CLIPS Version 7.00  06/11/24            */
    /*                                                     */
    /*                 DEFRULE HEADER FILE                 */
    /*******************************************************/
@@ -66,6 +66,10 @@
 /*                                                           */
 /*            ALLOW_ENVIRONMENT_GLOBALS no longer supported. */
 /*                                                           */
+/*      7.00: Support for data driven backward chaining.     */
+/*                                                           */
+/*            Support for certainty factors.                 */
+/*                                                           */
 /*************************************************************/
 
 #ifndef _H_ruledef
@@ -96,6 +100,7 @@ struct defrule
    unsigned int watchFiring     :  1;
    unsigned int autoFocus       :  1;
    unsigned int executing       :  1;
+   short certainty;
    struct expr *dynamicSalience;
    struct expr *actions;
    struct joinNode *logicalJoin;
@@ -112,7 +117,7 @@ struct defrule
 
 struct defruleModule
   {
-   struct defmoduleItemHeader header;
+   struct defmoduleItemHeaderHM header;
    struct salienceGroup *groupings;
    struct activation *agenda;
   };
@@ -132,6 +137,7 @@ struct defruleData
    bool BetaMemoryResizingFlag;
    struct joinLink *RightPrimeJoins;
    struct joinLink *LeftPrimeJoins;
+   struct joinLink *GoalPrimeJoins;
 
 #if DEBUGGING_FUNCTIONS
     bool WatchRules;
@@ -163,7 +169,7 @@ struct defruleData
    struct defruleModule          *GetDefruleModuleItem(Environment *,Defmodule *);
    bool                           DefruleIsDeletable(Defrule *);
 #if RUN_TIME
-   void                           DefruleRunTimeInitialize(Environment *,struct joinLink *,struct joinLink *);
+   void                           DefruleRunTimeInitialize(Environment *,struct joinLink *,struct joinLink *,struct joinLink *);
 #endif
 #if RUN_TIME || BLOAD_ONLY || BLOAD || BLOAD_AND_BSAVE
    void                           AddBetaMemoriesToJoin(Environment *,struct joinNode *);

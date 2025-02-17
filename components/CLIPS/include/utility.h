@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*             CLIPS Version 6.40  02/03/21            */
+   /*             CLIPS Version 7.00  07/25/24            */
    /*                                                     */
    /*                 UTILITY HEADER FILE                 */
    /*******************************************************/
@@ -69,6 +69,9 @@
 /*            Moved BufferedRead and FreeReadBuffer from     */
 /*            insfile.c to utility.c                         */
 /*                                                           */
+/*      6.42: Fixed GC bug by including garbage fact and     */
+/*            instances in the GC frame.                     */
+/*                                                           */
 /*************************************************************/
 
 #ifndef _H_utility
@@ -125,6 +128,10 @@ struct trackedMemory
    size_t memSize;
   };
 
+#if OBJECT_SYSTEM
+#include "insfun.h"
+#endif
+
 struct garbageFrame
   {
    bool dirty;
@@ -136,6 +143,14 @@ struct garbageFrame
    struct ephemeron *ephemeralExternalAddressList;
    Multifield *ListOfMultifields;
    Multifield *LastMultifield;
+#if DEFTEMPLATE_CONSTRUCT
+   Fact *GarbageFacts;
+   Fact *LastGarbageFact;
+#endif
+#if OBJECT_SYSTEM
+   IGARBAGE *GarbageInstances;
+   IGARBAGE *LastGarbageInstance;
+#endif
   };
 
 struct gcBlock
@@ -160,7 +175,6 @@ struct utilityData
   {
    struct voidCallFunctionItem *ListOfCleanupFunctions;
    struct voidCallFunctionItem *ListOfPeriodicFunctions;
-   struct voidCallFunctionItem *ListOfStartingFunctions;
    bool PeriodicFunctionsEnabled;
    bool YieldFunctionEnabled;
    void (*YieldTimeFunction)(void);
@@ -243,11 +257,10 @@ struct utilityData
    void                          *GetPeriodicFunctionContext(Environment *,const char *);
    void                           BufferedRead(Environment *,void *,size_t);
    void                           FreeReadBuffer(Environment *);
-
-   // Arduino Nano ESP32 + CLIPS adds:
-   bool                           AddStartingFunction(Environment *,const char *,VoidCallFunction *,int,void *);
-   void                           CallStartingTasks(Environment *);
-
+   bool                           IsPrime(size_t);
+   size_t                         IncreaseHashSize(size_t,size_t);
+   size_t                         DecreaseHashSize(size_t);
+   
 #endif /* _H_utility */
 
 

@@ -56,7 +56,6 @@
 /*                                                           */
 /*************************************************************/
 
-#include <climits>
 #include <stdio.h>
 #include <string.h>
 

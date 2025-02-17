@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.41  12/04/22             */
+   /*            CLIPS Version 7.00  01/29/25             */
    /*                                                     */
    /*               ARGUMENT ACCESS MODULE                */
    /*******************************************************/
@@ -60,6 +60,10 @@
 /*                                                           */
 /*      6.41: Used gensnprintf in place of gensprintf and.   */
 /*            sprintf.                                       */
+/*                                                           */
+/*      7.00: Construct hashing for quick lookup.            */
+/*                                                           */
+/*            Support for named facts.                       */
 /*                                                           */
 /*************************************************************/
 
@@ -187,7 +191,7 @@ Defmodule *GetModuleName(
    /* corresponds to a defined module.      */
    /*=======================================*/
 
-   if ((theModule = FindDefmodule(theEnv,returnValue.lexemeValue->contents)) == NULL)
+   if ((theModule = LookupDefmodule(theEnv,returnValue.lexemeValue)) == NULL)
      {
       if (strcmp("*",returnValue.lexemeValue->contents) != 0)
         {
@@ -480,9 +484,25 @@ void *GetFactOrInstanceArgument(
       if ((ptr = (void *) FindIndexedFact(theEnv,item->integerValue->contents)) == NULL)
         {
          char tempBuffer[20];
-         gensnprintf(tempBuffer,sizeof(tempBuffer),"f-%lld",item->integerValue->contents);
+         snprintf(tempBuffer,sizeof(tempBuffer),"f-%lld",item->integerValue->contents);
          CantFindItemErrorMessage(theEnv,"fact",tempBuffer,false);
         }
+      return ptr;
+     }
+#endif
+
+   /*==================================================*/
+   /* An symbol is a valid argument if it corresponds */
+   /* to the fact-name of an existing fact.           */
+   /*==================================================*/
+
+#if DEFTEMPLATE_CONSTRUCT
+   else if ((item->header->type == SYMBOL_TYPE) &&
+            (item->lexemeValue->contents[0] == '@'))
+
+     {
+      if ((ptr = (void *) LookupFact(theEnv,item->lexemeValue)) == NULL)
+        { CantFindItemErrorMessage(theEnv,"fact",item->lexemeValue->contents,false); }
       return ptr;
      }
 #endif

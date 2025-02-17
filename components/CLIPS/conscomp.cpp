@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*             CLIPS Version 6.41  12/04/22            */
+   /*             CLIPS Version 7.00  01/29/25            */
    /*                                                     */
    /*              CONSTRUCT COMPILER MODULE              */
    /*******************************************************/
@@ -77,6 +77,8 @@
 /*      6.41: Used gensnprintf in place of gensprintf and.   */
 /*            sprintf.                                       */
 /*                                                           */
+/*      7.00: Deftable construct added.                      */
+/*                                                           */
 /*************************************************************/
 
 #include "setup.h"
@@ -126,6 +128,10 @@
 #include "objcmp.h"
 #endif
 
+#if DEFTABLE_CONSTRUCT
+#include "tablecmp.h"
+#endif
+
 #include "conscomp.h"
 
 /***************/
@@ -163,7 +169,7 @@ const char *SecondaryCodes[] = { "A" , "B", "C", "D", "E" , "F" , "G" , "H", "I"
 /***************************************/
 
    void                               ConstructsToCCommand(Environment *,UDFContext *,UDFValue *);
-   static bool                        ConstructsToC(Environment *,const char *,const char *,char *,long long,long long);
+   static bool                        ConstructsToC(Environment *,const char *,const char *,size_t,unsigned,unsigned);
    static void                        WriteFunctionExternDeclarations(Environment *,FILE *);
    static bool                        FunctionsToCode(Environment *theEnv,const char *,const char *,char *);
    static bool                        WriteInitializationFunction(Environment *,const char *,const char *,char *);
@@ -221,7 +227,6 @@ void ConstructsToCCommand(
   UDFValue *returnValue)
   {
    const char *fileName;
-   char *fileNameBuffer;
    const char *pathName;
    UDFValue theArg;
    long long id, max;
@@ -289,6 +294,14 @@ void ConstructsToCCommand(
       ExpectedTypeError1(theEnv,"constructs-to-c",2,"'positive integer'");
       return;
      }
+   else if (id > UINT_MAX)
+     {
+      PrintErrorID(theEnv,"CONSCOMP",3,false);
+      WriteString(theEnv,STDERR,"Function 'constructs-to-c' expected argument #2 to be a positive integer <= ");
+      WriteInteger(theEnv,STDERR,UINT_MAX);
+      WriteString(theEnv,STDERR,".\n");
+      return;
+     }
 
    /*==================================================*/
    /* Get the path name argument if one was specified. */
@@ -325,6 +338,14 @@ void ConstructsToCCommand(
          ExpectedTypeError1(theEnv,"constructs-to-c",4,"'positive integer'");
          return;
         }
+      else if (max > UINT_MAX)
+        {
+         PrintErrorID(theEnv,"CONSCOMP",3,false);
+         WriteString(theEnv,STDERR,"Function 'constructs-to-c' expected argument #4 to be a positive integer <= ");
+         WriteInteger(theEnv,STDERR,UINT_MAX);
+         WriteString(theEnv,STDERR,".\n");
+         return;
+        }
      }
    else
      { max = 10000; }
@@ -334,11 +355,7 @@ void ConstructsToCCommand(
    /* generate the C code.       */
    /*============================*/
 
-   fileNameBuffer = (char *) genalloc(theEnv,nameLength + pathLength + EXTRA_FILE_NAME);
-
-   ConstructsToC(theEnv,fileName,pathName,fileNameBuffer,id,max);
-
-   genfree(theEnv,fileNameBuffer,nameLength + pathLength + EXTRA_FILE_NAME);
+   ConstructsToC(theEnv,fileName,pathName,nameLength + pathLength + EXTRA_FILE_NAME,(unsigned) id, (unsigned) max);
   }
 
 /***************************************/
@@ -349,12 +366,19 @@ static bool ConstructsToC(
   Environment *theEnv,
   const char *fileName,
   const char *pathName,
-  char *fileNameBuffer,
-  long long theImageID,
-  long long max)
+  size_t bufferSize,
+  unsigned theImageID,
+  unsigned max)
   {
    unsigned fileVersion;
    struct CodeGeneratorItem *cgPtr;
+   char *fileNameBuffer;
+
+   /*================================*/
+   /* Allocate the file name buffer. */
+   /*================================*/
+   
+   fileNameBuffer = (char *) genalloc(theEnv,bufferSize);
 
    /*===============================================*/
    /* Set the global MaxIndices variable indicating */
@@ -362,16 +386,17 @@ static bool ConstructsToC(
    /* in each file.                                 */
    /*===============================================*/
 
-   ConstructCompilerData(theEnv)->MaxIndices = (unsigned) max; /* TBD */
+   ConstructCompilerData(theEnv)->MaxIndices = max;
 
    /*=====================================================*/
    /* Open a header file for dumping general information. */
    /*=====================================================*/
 
-   gensprintf(fileNameBuffer,"%s%s.h",pathName,fileName);
+   snprintf(fileNameBuffer,bufferSize,"%s%s.h",pathName,fileName);
    if ((ConstructCompilerData(theEnv)->HeaderFP = GenOpen(theEnv,fileNameBuffer,"w")) == NULL)
      {
       OpenErrorMessage(theEnv,"constructs-to-c",fileNameBuffer);
+      genfree(theEnv,fileNameBuffer,bufferSize);
       return false;
      }
 
@@ -379,10 +404,11 @@ static bool ConstructsToC(
    /* Open a file for dumping fixup information. */
    /*============================================*/
 
-   gensprintf(fileNameBuffer,"%s%s_init.c",pathName,fileName);
+   snprintf(fileNameBuffer,bufferSize,"%s%s_init.c",pathName,fileName);
    if ((ConstructCompilerData(theEnv)->FixupFP = GenOpen(theEnv,fileNameBuffer,"w")) == NULL)
      {
       OpenErrorMessage(theEnv,"constructs-to-c",fileNameBuffer);
+      genfree(theEnv,fileNameBuffer,bufferSize);
       return false;
      }
 
@@ -403,7 +429,8 @@ static bool ConstructsToC(
    ConstructCompilerData(theEnv)->FilePrefix = fileName;
    ConstructCompilerData(theEnv)->PathName = pathName;
    ConstructCompilerData(theEnv)->FileNameBuffer = fileNameBuffer;
-   ConstructCompilerData(theEnv)->ImageID = (unsigned) theImageID; /* TBD */
+   ConstructCompilerData(theEnv)->BufferSize = bufferSize;
+   ConstructCompilerData(theEnv)->ImageID = theImageID;
    ConstructCompilerData(theEnv)->ExpressionFP = NULL;
    ConstructCompilerData(theEnv)->ExpressionVersion = 1;
    ConstructCompilerData(theEnv)->ExpressionHeader = true;
@@ -519,6 +546,12 @@ static bool ConstructsToC(
    /*========================*/
 
    GenClose(theEnv,ConstructCompilerData(theEnv)->HeaderFP);
+   
+   /*============================*/
+   /* Free the file name buffer. */
+   /*============================*/
+   
+   genfree(theEnv,fileNameBuffer,bufferSize);
 
    /*==================================================*/
    /* Return true to indicate that the constructs-to-c */
@@ -683,7 +716,7 @@ static bool WriteInitializationFunction(
    /* Open the initialization file. */
    /*===============================*/
 
-   gensprintf(fileNameBuffer,"%s%s.c",pathName,fileName);
+   snprintf(fileNameBuffer,ConstructCompilerData(theEnv)->BufferSize,"%s%s.c",pathName,fileName);
    if ((fp = GenOpen(theEnv,fileNameBuffer,"w")) == NULL)
      {
       OpenErrorMessage(theEnv,"constructs-to-c",fileNameBuffer);
@@ -777,7 +810,7 @@ FILE *NewCFile(
   {
    FILE *newFP;
 
-   gensprintf(fileNameBuffer,"%s%s%d_%d.c",pathName,fileName,id,version);
+   snprintf(fileNameBuffer,ConstructCompilerData(theEnv)->BufferSize,"%s%s%d_%d.c",pathName,fileName,id,version);
 
    if (reopenOldFile)
      { newFP = GenOpen(theEnv,fileNameBuffer,"a"); }
@@ -940,6 +973,7 @@ static void DumpExpression(
            break;
 
          case INTEGER_TYPE:
+         case QUANTITY_TYPE:
            PrintIntegerReference(theEnv,ConstructCompilerData(theEnv)->ExpressionFP,exprPtr->integerValue);
            break;
 
@@ -969,6 +1003,15 @@ static void DumpExpression(
 #if DEFTEMPLATE_CONSTRUCT
            DeftemplateCConstructReference(theEnv,ConstructCompilerData(theEnv)->ExpressionFP,
                                           (Deftemplate *) exprPtr->value,ConstructCompilerData(theEnv)->ImageID,ConstructCompilerData(theEnv)->MaxIndices);
+#else
+           fprintf(ConstructCompilerData(theEnv)->ExpressionFP,"NULL");
+#endif
+           break;
+
+         case DEFTABLE_PTR:
+#if DEFTABLE_CONSTRUCT
+           DeftableCConstructReference(theEnv,ConstructCompilerData(theEnv)->ExpressionFP,
+                                       (Deftable *) exprPtr->value,ConstructCompilerData(theEnv)->ImageID,ConstructCompilerData(theEnv)->MaxIndices);
 #else
            fprintf(ConstructCompilerData(theEnv)->ExpressionFP,"NULL");
 #endif
@@ -1034,7 +1077,7 @@ static void DumpExpression(
            if (EvaluationData(theEnv)->PrimitivesArray[exprPtr->type] == NULL)
              { fprintf(ConstructCompilerData(theEnv)->ExpressionFP,"NULL"); }
            else if (EvaluationData(theEnv)->PrimitivesArray[exprPtr->type]->bitMap)
-             { PrintBitMapReference(theEnv,ConstructCompilerData(theEnv)->ExpressionFP,(CLIPSBitMap *) exprPtr->value); }
+             { PrintBitMapReference(theEnv,ConstructCompilerData(theEnv)->ExpressionFP,exprPtr->bitMapValue); }
            else
              { fprintf(ConstructCompilerData(theEnv)->ExpressionFP,"NULL"); }
            break;
@@ -1134,9 +1177,9 @@ struct CodeGeneratorItem *AddCodeGeneratorItem(
       for (i = 0 ; i < arrayCount ; i++)
         {
          if (ConstructCompilerData(theEnv)->CodeGeneratorCount < PRIMARY_LEN)
-           { gensnprintf(theBuffer,sizeof(theBuffer),"%c",PRIMARY_CODES[ConstructCompilerData(theEnv)->CodeGeneratorCount]); }
+           { snprintf(theBuffer,sizeof(theBuffer),"%c",PRIMARY_CODES[ConstructCompilerData(theEnv)->CodeGeneratorCount]); }
          else
-           { gensnprintf(theBuffer,sizeof(theBuffer),"%s_",SecondaryCodes[ConstructCompilerData(theEnv)->CodeGeneratorCount - PRIMARY_LEN]); }
+           { snprintf(theBuffer,sizeof(theBuffer),"%s_",SecondaryCodes[ConstructCompilerData(theEnv)->CodeGeneratorCount - PRIMARY_LEN]); }
          ConstructCompilerData(theEnv)->CodeGeneratorCount++;
          newPtr->arrayNames[i] = (char *) gm2(theEnv,(strlen(theBuffer) + 1));
          genstrcpy(newPtr->arrayNames[i],theBuffer);
@@ -1372,7 +1415,7 @@ FILE *OpenFileIfNeeded(
    if (reopenOldFile == false)
      {
       (*fileCount)++;
-      gensnprintf(arrayName,sizeof(arrayName),"%s%d_%d",structPrefix,imageID,arrayVersion);
+      snprintf(arrayName,sizeof(arrayName),"%s%d_%d",structPrefix,imageID,arrayVersion);
       fprintf(theFile,"%s %s[] = {\n",structureName,arrayName);
       fprintf(headerFP,"extern %s %s[];\n",structureName,arrayName);
      }
@@ -1471,6 +1514,9 @@ void ConstructHeaderToCode(
         break;
       case DEFINSTANCES:
         fprintf(theFile,"DEFINSTANCES,");
+        break;
+      case DEFTABLE:
+        fprintf(theFile,"DEFTABLE,");
         break;
      }
 

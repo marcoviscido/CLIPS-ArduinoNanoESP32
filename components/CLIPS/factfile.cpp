@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.41  08/16/22             */
+   /*            CLIPS Version 7.00  09/18/24             */
    /*                                                     */
    /*        FACT LOAD/SAVE (ASCII/BINARY) MODULE         */
    /*******************************************************/
@@ -1475,9 +1475,7 @@ static void MarkNeededAtom(
       instance-names, instance-addresses,
       fact-addresses or external-addresses
       ===================================== */
-   
-   // TBD fact address and external address
-      
+
    switch (theValue->header->type)
      {
       case SYMBOL_TYPE:
@@ -1728,8 +1726,6 @@ static void SaveAtomBinary(
       fact-addresses or external-addresses
       ===================================== */
 
-   // TBD fact address and external address
-
    bsa.type = theValue->header->type;
    switch (theValue->header->type)
      {
@@ -1756,6 +1752,5 @@ static void SaveAtomBinary(
      
    fwrite(&bsa,sizeof(struct bsaveSlotValueAtom),1,bsaveFP);
   }
-
 
 #endif /* DEFTEMPLATE_CONSTRUCT */

@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.40  07/30/16             */
+   /*            CLIPS Version 7.00  08/24/24             */
    /*                                                     */
    /*                   GENERATE MODULE                   */
    /*******************************************************/
@@ -39,6 +39,8 @@
 /*                                                           */
 /*            Removed use of void pointers for specific      */
 /*            data structures.                               */
+/*                                                           */
+/*      7.00: Support for data driven backward chaining.     */
 /*                                                           */
 /*************************************************************/
 
@@ -279,13 +281,17 @@ void FieldConversion(
          /* Generate the hash index. */
          /*==========================*/
 
-         if (theField->patternType->genGetPNValueFunction != NULL)
+         if ((! theField->goalCE) &&
+             (! theField->referringNode->goalCE) &&
+             (theField->patternType->genGetPNValueFunction != NULL))
            {
             tempExpression = (*theField->patternType->genGetPNValueFunction)(theEnv,theField);
             thePattern->rightHash = AppendExpressions(tempExpression,thePattern->rightHash);
            }
 
-         if (theField->referringNode->patternType->genGetJNValueFunction)
+         if ((! theField->goalCE) &&
+             (! theField->referringNode->goalCE) &&
+             (theField->referringNode->patternType->genGetJNValueFunction))
            {
             tempExpression = (*theField->referringNode->patternType->genGetJNValueFunction)(theEnv,theField->referringNode,LHS);
             thePattern->leftHash = AppendExpressions(tempExpression,thePattern->leftHash);
@@ -406,15 +412,17 @@ static void ExtractFieldTest(
       if (testInPatternNetwork == true)
         {
          *patternNetTest = GenPNConstant(theEnv,theField);
-
-         if (! theField->negated)
+ 
+         if ((! theField->negated) &&
+             (! ((theField->pnType == SYMBOL_NODE) &&
+                 (strcmp(theField->lexemeValue->contents,"??") == 0)))) // TBD Use Universal value instead
            {
             *constantSelector = (*theField->patternType->genGetPNValueFunction)(theEnv,theField);
             *constantValue = GenConstant(theEnv,NodeTypeToType(theField),theField->value);
            }
         }
       else
-        { *joinNetTest = GenJNConstant(theEnv,theField,false); } // TBD Remove false
+        { *joinNetTest = GenJNConstant(theEnv,theField,false); }
      }
 
    /*===========================================================*/
@@ -427,7 +435,7 @@ static void ExtractFieldTest(
           (AllVariablesInExpression(theField->expression,theField->pattern) == true))
         { *patternNetTest = GenPNColon(theEnv,theField); }
       else
-        { *joinNetTest = GenJNColon(theEnv,theField,false,theNandFrames); } // TBD Remove false
+        { *joinNetTest = GenJNColon(theEnv,theField,false,theNandFrames); }
      }
 
    /*==============================================================*/
@@ -440,7 +448,7 @@ static void ExtractFieldTest(
           (AllVariablesInExpression(theField->expression,theField->pattern) == true))
         { *patternNetTest = GenPNEq(theEnv,theField); }
       else
-        { *joinNetTest = GenJNEq(theEnv,theField,false,theNandFrames); } // TBD Remove false
+        { *joinNetTest = GenJNEq(theEnv,theField,false,theNandFrames); }
      }
 
    /*=====================================================================*/
@@ -570,9 +578,9 @@ static struct expr *GenJNColon(
    /*==================================================*/
 
    if (isNand)
-     { conversion = GetvarReplace(theEnv,theField->expression,true,theNandFrames); }
+     { conversion = GetvarReplace(theEnv,theField->expression,true,false,theNandFrames); }
    else
-     { conversion = GetvarReplace(theEnv,theField->expression,false,theNandFrames); }
+     { conversion = GetvarReplace(theEnv,theField->expression,false,false,theNandFrames); }
 
    /*================================================*/
    /* If the predicate constraint is negated by a ~, */
@@ -647,9 +655,9 @@ static struct expr *GenJNEq(
    /*==================================================*/
 
    if (isNand)
-     { conversion = GetvarReplace(theEnv,theField->expression,true,theNandFrames); }
+     { conversion = GetvarReplace(theEnv,theField->expression,true,false,theNandFrames); }
    else
-     { conversion = GetvarReplace(theEnv,theField->expression,false,theNandFrames); }
+     { conversion = GetvarReplace(theEnv,theField->expression,false,true,theNandFrames); }
 
    /*============================================================*/
    /* If the return value constraint is negated by a ~, then use */
@@ -774,6 +782,7 @@ struct expr *GetvarReplace(
   Environment *theEnv,
   struct lhsParseNode *nodeList,
   bool isNand,
+  bool coerceLHS,
   struct nandFrame *theNandFrames)
   {
    struct expr *newList;
@@ -794,8 +803,8 @@ struct expr *GetvarReplace(
    newList = get_struct(theEnv,expr);
    newList->type = NodeTypeToType(nodeList);
    newList->value = nodeList->value;
-   newList->nextArg = GetvarReplace(theEnv,nodeList->right,isNand,theNandFrames);
-   newList->argList = GetvarReplace(theEnv,nodeList->bottom,isNand,theNandFrames);
+   newList->nextArg = GetvarReplace(theEnv,nodeList->right,isNand,coerceLHS,theNandFrames);
+   newList->argList = GetvarReplace(theEnv,nodeList->bottom,isNand,coerceLHS,theNandFrames);
 
    /*=========================================================*/
    /* If the present node being examined is either a local or */
@@ -835,8 +844,25 @@ struct expr *GetvarReplace(
            }
          else
            {
+            struct lhsParseNode *useNode = nodeList->referringNode;
+            int side = RHS;
+
+            if (coerceLHS)
+              {
+               while ((useNode != NULL) &&
+                      (nodeList->joinDepth == useNode->joinDepth))
+                 {
+                  useNode = useNode->referringNode;
+                 }
+                 
+               if (useNode == NULL)
+                 { useNode = nodeList->referringNode; }
+               else
+                 { side = LHS; }
+              }
+
             (*nodeList->referringNode->patternType->replaceGetJNValueFunction)
-               (theEnv,newList,nodeList->referringNode,RHS);
+               (theEnv,newList,useNode,side);
            }
         }
      }

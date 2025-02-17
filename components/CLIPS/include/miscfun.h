@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*             CLIPS Version 6.40  07/17/18            */
+   /*             CLIPS Version 7.00  07/03/24            */
    /*                                                     */
    /*          MISCELLANEOUS FUNCTIONS HEADER FILE        */
    /*******************************************************/
@@ -76,6 +76,9 @@
 /*            Added get-error, set-error, and clear-error    */
 /*            functions.                                     */
 /*                                                           */
+/*      7.00: Support for ?var:slot references to facts in   */
+/*            methods and rule actions.                      */
+/*                                                           */
 /*************************************************************/
 
 #ifndef _H_miscfun
@@ -85,7 +88,7 @@
 #define _H_miscfun
 
    void                           MiscFunctionDefinitions(Environment *);
-   // void                           ExitCommand(Environment *,UDFContext *,UDFValue *); // Not needed in ArduinoNanoESP32
+   void                           ExitCommand(Environment *,UDFContext *,UDFValue *); // Not needed in ArduinoNanoESP32
    void                           CreateFunction(Environment *,UDFContext *,UDFValue *);
    void                           SetgenFunction(Environment *,UDFContext *,UDFValue *);
    void                           GensymFunction(Environment *,UDFContext *,UDFValue *);
@@ -122,6 +125,7 @@
    void                           SetErrorFunction(Environment *,UDFContext *,UDFValue *);
    void                           SetErrorValue(Environment *,TypeHeader *);
    void                           VoidFunction(Environment *,UDFContext *,UDFValue *);
+   void                           SlotValueFunction(Environment *,UDFContext *,UDFValue *);
 
 #endif /* _H_miscfun */
 

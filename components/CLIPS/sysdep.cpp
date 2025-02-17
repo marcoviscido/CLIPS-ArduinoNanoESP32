@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.41  01/27/23             */
+   /*            CLIPS Version 7.00  01/28/25             */
    /*                                                     */
    /*               SYSTEM DEPENDENT MODULE               */
    /*******************************************************/
@@ -126,9 +126,13 @@
 /*            Changed gengetcwd buffer length parameter from */
 /*            int to size_t.                                 */
 /*                                                           */
+/*      7.00: On macOS, changed calls of srand and rand to   */
+/*            srandom and random.                            */
+/*                                                           */
+/*            Removed gensnprintf and gensprintf functions.  */
+/*                                                           */
 /*************************************************************/
 
-#include <climits>
 #include "setup.h"
 
 #include <stdio.h>
@@ -208,7 +212,7 @@ void InitializeSystemDependentData(
 /*   which indicates the present time. Used internally   */
 /*   for timing rule firings and debugging.              */
 /*********************************************************/
-double gentime()
+double gentime(void)
   {
 #if MAC_XCD || UNIX_V || DARWIN || LINUX || UNIX_7
    struct timeval now;
@@ -355,53 +359,16 @@ char *genstrncat(
    return strncat(dest,src,n);
   }
 
-/*****************************************/
-/* gensprintf: Generic sprintf function. */
-/*****************************************/
-int gensprintf(
-  char *buffer,
-  const char *restrictStr,
-  ...)
-  {
-   va_list args;
-   int rv;
-
-   va_start(args,restrictStr);
-
-   rv = vsprintf(buffer,restrictStr,args);
-
-   va_end(args);
-
-   return rv;
-  }
-
-/*******************************************/
-/* gensnprintf: Generic snprintf function. */
-/*******************************************/
-int gensnprintf(
-  char *buffer,
-  size_t bufferSize,
-  const char *restrictStr,
-  ...)
-  {
-   va_list args;
-   int rv;
-
-   va_start(args,restrictStr);
-
-   rv = vsnprintf(buffer,bufferSize,restrictStr,args);
-
-   va_end(args);
-
-   return rv;
-  }
-
 /******************************************************/
 /* genrand: Generic random number generator function. */
 /******************************************************/
-int genrand()
+int genrand(void)
   {
+#if MAC_XCD || DARWIN
+   return (int) random();
+#else
    return(rand());
+#endif
   }
 
 /**********************************************************************/
@@ -410,7 +377,11 @@ int genrand()
 void genseed(
   unsigned int seed)
   {
+#if MAC_XCD || DARWIN
+   srandom(seed);
+#else
    srand(seed);
+#endif
   }
 
 /*********************************************/

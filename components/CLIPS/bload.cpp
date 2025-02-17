@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.41  12/04/22             */
+   /*            CLIPS Version 7.00  01/29/25             */
    /*                                                     */
    /*                    BLOAD MODULE                     */
    /*******************************************************/
@@ -91,7 +91,7 @@ void InitializeBloadData(
   Environment *theEnv)
   {
    char sizeBuffer[20];
-   gensnprintf(sizeBuffer,sizeof(sizeBuffer),
+   snprintf(sizeBuffer,sizeof(sizeBuffer),
                "%2zu%2zu%2zu%2zu%2zu",sizeof(void *),sizeof(double),
                sizeof(int),sizeof(long),sizeof(long long));
 
@@ -100,7 +100,7 @@ void InitializeBloadData(
    AddClearFunction(theEnv,"bload",ClearBloadCallback,10000,NULL);
 
    BloadData(theEnv)->BinaryPrefixID = "\1\2\3\4CLIPS";
-   BloadData(theEnv)->BinaryVersionID = "V6.40";
+   BloadData(theEnv)->BinaryVersionID = "V7.00";
    BloadData(theEnv)->BinarySizes = (char *) genalloc(theEnv,strlen(sizeBuffer) + 1);
    genstrcpy(BloadData(theEnv)->BinarySizes,sizeBuffer);
   }

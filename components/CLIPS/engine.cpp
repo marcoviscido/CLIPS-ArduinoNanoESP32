@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.41  12/04/22             */
+   /*            CLIPS Version 7.00  01/29/25             */
    /*                                                     */
    /*                    ENGINE MODULE                    */
    /*******************************************************/
@@ -87,6 +87,13 @@
 /*                                                           */
 /*      6.41: Used gensnprintf in place of gensprintf and.   */
 /*            sprintf.                                       */
+/*                                                           */
+/*      6.42: Added call to clean the current garbage frame  */
+/*            for an embedded Run function call.             */
+/*                                                           */
+/*      7.00: Construct hashing for quick lookup.            */
+/*                                                           */
+/*            Support for certainty factors.                 */
 /*                                                           */
 /*************************************************************/
 
@@ -197,6 +204,9 @@ long long Run(
    int danglingConstructs;
    GCBlock gcb;
    bool error = false;
+#if CERTAINTY_FACTORS
+   short cf, tally;
+#endif
 
    /*=====================================================*/
    /* Make sure the run command is not already executing. */
@@ -312,7 +322,7 @@ long long Run(
         {
          char printSpace[60];
 
-         gensnprintf(printSpace,sizeof(printSpace),"FIRE %4lld ",rulesFired);
+         snprintf(printSpace,sizeof(printSpace),"FIRE %4lld ",rulesFired);
          WriteString(theEnv,STDOUT,printSpace);
          WriteString(theEnv,STDOUT,ruleFiring);
          WriteString(theEnv,STDOUT,": ");
@@ -340,16 +350,36 @@ long long Run(
       /*===================================================================*/
       /* Increment the count for each of the facts/objects associated with */
       /* the rule activation so that the facts/objects cannot be deleted   */
-      /* by garbage collection while the rule is executing.                */
+      /* by garbage collection while the rule is executing. Also, compute  */
+      /* the tally using any facts in the activation that have certainty   */
+      /* factors.                                                          */
       /*===================================================================*/
 
+#if CERTAINTY_FACTORS
+      tally = 100;
+#endif
       for (i = 0; i < theBasis->bcount; i++)
         {
          if (theBasis->binds[i].gm.theMatch == NULL) continue;
          theMatchingItem = theBasis->binds[i].gm.theMatch->matchingItem;
          if (theMatchingItem != NULL)
-           { (*theMatchingItem->theInfo->incrementBasisCount)(theEnv,theMatchingItem); }
+           {
+            (*theMatchingItem->theInfo->incrementBasisCount)(theEnv,theMatchingItem);
+#if CERTAINTY_FACTORS
+            if (theMatchingItem->header.type == FACT_ADDRESS_TYPE)
+              {
+               Fact *theFact = (Fact *) theMatchingItem;
+               cf = GetFactCertaintyFactor(theFact);
+               if (cf < tally)
+                 { tally = cf; }
+              }
+#endif
+           }
         }
+
+#if CERTAINTY_FACTORS
+      EngineData(theEnv)->certaintyTally = tally;
+#endif
 
       /*====================================================*/
       /* If the rule has logical CEs, set up the pointer to */
@@ -607,62 +637,62 @@ long long Run(
 #endif
 
 #if DEFTEMPLATE_CONSTRUCT
-      gensnprintf(printSpace,sizeof(printSpace),"%ld mean number of facts (%ld maximum).\n",
+      snprintf(printSpace,sizeof(printSpace),"%ld mean number of facts (%ld maximum).\n",
                           (long) (((double) sumFacts / (rulesFired + 1)) + 0.5),
                           maxFacts);
       WriteString(theEnv,STDOUT,printSpace);
 #endif
 
 #if OBJECT_SYSTEM
-      gensnprintf(printSpace,sizeof(printSpace),"%ld mean number of instances (%ld maximum).\n",
+      snprintf(printSpace,sizeof(printSpace),"%ld mean number of instances (%ld maximum).\n",
                           (long) (((double) sumInstances / (rulesFired + 1)) + 0.5),
                           maxInstances);
       WriteString(theEnv,STDOUT,printSpace);
 #endif
 
-      gensnprintf(printSpace,sizeof(printSpace),"%ld mean number of activations (%ld maximum).\n",
+      snprintf(printSpace,sizeof(printSpace),"%ld mean number of activations (%ld maximum).\n",
                           (long) (((double) sumActivations / (rulesFired + 1)) + 0.5),
                           maxActivations);
       WriteString(theEnv,STDOUT,printSpace);
 
 #if DEVELOPER
-      gensnprintf(printSpace,sizeof(printSpace),"%9ld left to right comparisons.\n",
+      snprintf(printSpace,sizeof(printSpace),"%9ld left to right comparisons.\n",
                           EngineData(theEnv)->leftToRightComparisons);
       WriteString(theEnv,STDOUT,printSpace);
 
-      gensnprintf(printSpace,sizeof(printSpace),"%9ld left to right succeeds.\n",
+      snprintf(printSpace,sizeof(printSpace),"%9ld left to right succeeds.\n",
                           EngineData(theEnv)->leftToRightSucceeds);
       WriteString(theEnv,STDOUT,printSpace);
 
-      gensnprintf(printSpace,sizeof(printSpace),"%9ld left to right loops.\n",
+      snprintf(printSpace,sizeof(printSpace),"%9ld left to right loops.\n",
                           EngineData(theEnv)->leftToRightLoops);
       WriteString(theEnv,STDOUT,printSpace);
 
-      gensnprintf(printSpace,sizeof(printSpace),"%9ld right to left comparisons.\n",
+      snprintf(printSpace,sizeof(printSpace),"%9ld right to left comparisons.\n",
                           EngineData(theEnv)->rightToLeftComparisons);
       WriteString(theEnv,STDOUT,printSpace);
 
-      gensnprintf(printSpace,sizeof(printSpace),"%9ld right to left succeeds.\n",
+      snprintf(printSpace,sizeof(printSpace),"%9ld right to left succeeds.\n",
                           EngineData(theEnv)->rightToLeftSucceeds);
       WriteString(theEnv,STDOUT,printSpace);
 
-      gensnprintf(printSpace,sizeof(printSpace),"%9ld right to left loops.\n",
+      snprintf(printSpace,sizeof(printSpace),"%9ld right to left loops.\n",
                           EngineData(theEnv)->rightToLeftLoops);
       WriteString(theEnv,STDOUT,printSpace);
 
-      gensnprintf(printSpace,sizeof(printSpace),"%9ld find next conflicting comparisons.\n",
+      snprintf(printSpace,sizeof(printSpace),"%9ld find next conflicting comparisons.\n",
                           EngineData(theEnv)->findNextConflictingComparisons);
       WriteString(theEnv,STDOUT,printSpace);
 
-      gensnprintf(printSpace,sizeof(printSpace),"%9ld beta hash list skips.\n",
+      snprintf(printSpace,sizeof(printSpace),"%9ld beta hash list skips.\n",
                           EngineData(theEnv)->betaHashListSkips);
       WriteString(theEnv,STDOUT,printSpace);
 
-      gensnprintf(printSpace,sizeof(printSpace),"%9ld beta hash hash table skips.\n",
+      snprintf(printSpace,sizeof(printSpace),"%9ld beta hash hash table skips.\n",
                           EngineData(theEnv)->betaHashHTSkips);
       WriteString(theEnv,STDOUT,printSpace);
 
-      gensnprintf(printSpace,sizeof(printSpace),"%9ld unneeded marker compare.\n",
+      snprintf(printSpace,sizeof(printSpace),"%9ld unneeded marker compare.\n",
                           EngineData(theEnv)->unneededMarkerCompare);
       WriteString(theEnv,STDOUT,printSpace);
 
@@ -686,6 +716,8 @@ long long Run(
    /*================================*/
 
    GCBlockEnd(theEnv,&gcb);
+   if (EvaluationData(theEnv)->CurrentExpression == NULL)
+     { CleanCurrentGarbageFrame(theEnv,NULL); }
    CallPeriodicTasks(theEnv);
 
    /*===================================*/
@@ -1491,7 +1523,6 @@ void FocusCommand(
   UDFValue *returnValue)
   {
    UDFValue theArg;
-   const char *argument;
    Defmodule *theModule;
    unsigned int argCount, i;
 
@@ -1506,12 +1537,11 @@ void FocusCommand(
       if (! UDFNthArgument(context,i,SYMBOL_BIT,&theArg))
         { return; }
 
-      argument = theArg.lexemeValue->contents;
-      theModule = FindDefmodule(theEnv,argument);
+      theModule = LookupDefmodule(theEnv,theArg.lexemeValue);
 
       if (theModule == NULL)
         {
-         CantFindItemErrorMessage(theEnv,"defmodule",argument,true);
+         CantFindItemErrorMessage(theEnv,"defmodule",theArg.lexemeValue->contents,true);
          returnValue->lexemeValue = FalseSymbol(theEnv);
          return;
         }

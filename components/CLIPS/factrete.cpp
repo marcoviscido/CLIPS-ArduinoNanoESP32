@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.41  07/23/21             */
+   /*            CLIPS Version 7.00  08/30/24             */
    /*                                                     */
    /*          FACT RETE ACCESS FUNCTIONS MODULE          */
    /*******************************************************/
@@ -40,6 +40,8 @@
 /*                                                           */
 /*            UDF redesign.                                  */
 /*                                                           */
+/*      7.00: Support for data driven backward chaining.     */
+/*                                                           */
 /*************************************************************/
 
 #include <stdio.h>
@@ -54,6 +56,7 @@
 #include "extnfunc.h"
 #include "factgen.h"
 #include "factmch.h"
+#include "factgoal.h"
 #include "incrrset.h"
 #include "memalloc.h"
 #include "multifld.h"
@@ -189,12 +192,33 @@ bool FactPNGetVar2(
    Fact *factPtr;
    const struct factGetVarPN2Call *hack;
    CLIPSValue *fieldPtr;
+   struct extractedInfo *theInfo;
 
    /*==========================================*/
    /* Retrieve the arguments for the function. */
    /*==========================================*/
 
    hack = (const struct factGetVarPN2Call *) ((CLIPSBitMap *) theValue)->contents;
+   
+   /*====================================*/
+   /* Special code for handling variable */
+   /* access while generating a goal.    */
+   /*====================================*/
+   
+   if (FactData(theEnv)->goalInfoArray != NULL)
+     {
+      theInfo = FactData(theEnv)->goalInfoArray[hack->whichSlot];
+      
+      if (theInfo != NULL)
+        {
+         CLIPSToUDFValue(&theInfo->theValue,returnValue);
+
+         if (returnValue->value == FalseSymbol(theEnv))
+           { return false; }
+   
+         return true;
+        }
+     }
 
    /*==============================*/
    /* Get the pointer to the fact. */
@@ -230,12 +254,36 @@ bool FactPNGetVar3(
    Multifield *segmentPtr;
    CLIPSValue *fieldPtr;
    const struct factGetVarPN3Call *hack;
+   struct extractedInfo *theInfo;
 
    /*==========================================*/
    /* Retrieve the arguments for the function. */
    /*==========================================*/
 
    hack = (const struct factGetVarPN3Call *) ((CLIPSBitMap *) theValue)->contents;
+
+   /*====================================*/
+   /* Special code for handling variable */
+   /* access while generating a goal.    */
+   /*====================================*/
+   
+   if (FactData(theEnv)->goalInfoArray != NULL)
+     {
+      for (theInfo = FactData(theEnv)->goalInfoArray[hack->whichSlot];
+           theInfo != NULL;
+           theInfo = theInfo->next)
+        {
+         if (hack->beginOffset == theInfo->field)
+           {
+            CLIPSToUDFValue(&theInfo->theValue,returnValue);
+
+            if (returnValue->value == FalseSymbol(theEnv))
+              { return false; }
+   
+             return true;
+           }
+        }
+     }
 
    /*==============================*/
    /* Get the pointer to the fact. */
@@ -313,6 +361,15 @@ bool FactPNConstant1(
    /*====================================*/
 
    theConstant = GetFirstArgument();
+   
+   if (theConstant->type == UQV_TYPE)
+     {
+      if (fieldPtr->header->type == UQV_TYPE)
+        { return hack->testForEquality; }
+      else
+        { return 1 - hack->testForEquality; }
+     }
+     
    if (theConstant->value != fieldPtr->value)
      {
       if (1 - hack->testForEquality)
@@ -380,6 +437,15 @@ bool FactPNConstant2(
    /*====================================*/
 
    theConstant = GetFirstArgument();
+   
+   if (theConstant->type == UQV_TYPE)
+     {
+      if (fieldPtr->header->type == UQV_TYPE)
+        { return hack->testForEquality; }
+      else
+        { return 1 - hack->testForEquality; }
+     }
+
    if (theConstant->value != fieldPtr->value)
      {
       if (1 - hack->testForEquality)
@@ -615,12 +681,36 @@ bool FactJNGetVar3(
    Multifield *segmentPtr;
    CLIPSValue *fieldPtr;
    const struct factGetVarJN3Call *hack;
-
+   struct extractedInfo *theInfo;
+   
    /*==========================================*/
    /* Retrieve the arguments for the function. */
    /*==========================================*/
 
    hack = (const struct factGetVarJN3Call *) ((CLIPSBitMap *) theValue)->contents;
+
+   /*===========================================*/
+   /* Special code for handling variable access */
+   /* while generating a goal.                  */
+   /*===========================================*/
+   
+   if (hack->rhs && (FactData(theEnv)->goalInfoArray != NULL))
+     {
+      for (theInfo = FactData(theEnv)->goalInfoArray[hack->whichSlot];
+           theInfo != NULL;
+           theInfo = theInfo->next)
+        {
+         if (hack->beginOffset == theInfo->field)
+           {
+            CLIPSToUDFValue(&theInfo->theValue,returnValue);
+
+            if (returnValue->value == FalseSymbol(theEnv))
+              { return false; }
+   
+             return true;
+           }
+        }
+     }
 
    /*=====================================================*/
    /* Get the pointer to the fact from the partial match. */
@@ -758,6 +848,10 @@ bool FactJNCompVars1(
    e1 = hack->slot1;
    e2 = hack->slot2;
 
+   if ((fact1->theProposition.contents[e1].header->type == UQV_TYPE) ||
+       (fact2->theProposition.contents[e2].header->type == UQV_TYPE))
+     { return hack->pass; }
+   
    if (fact1->theProposition.contents[e1].value !=
        fact2->theProposition.contents[e2].value)
      { return hack->fail; }
@@ -839,6 +933,10 @@ bool FactJNCompVars2(
    /*=====================*/
    /* Compare the values. */
    /*=====================*/
+
+   if ((fieldPtr1->header->type == UQV_TYPE) ||
+       (fieldPtr2->header->type == UQV_TYPE))
+     { return hack->pass; }
 
    if (fieldPtr1->value != fieldPtr2->value)
      { return hack->fail; }

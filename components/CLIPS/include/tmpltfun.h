@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*             CLIPS Version 6.40  11/01/16            */
+   /*             CLIPS Version 7.00  11/28/24            */
    /*                                                     */
    /*          DEFTEMPLATE FUNCTION HEADER FILE           */
    /*******************************************************/
@@ -70,6 +70,11 @@
 /*                                                           */
 /*            Modify command preserves fact id and address.  */
 /*                                                           */
+/*      7.00: Support for non-reactive fact patterns.        */
+/*                                                           */
+/*            Support for ?var:slot references to facts in   */
+/*            methods and rule actions.                      */
+/*                                                           */
 /*************************************************************/
 
 #ifndef _H_tmpltfun
@@ -83,11 +88,12 @@
 #include "symbol.h"
 #include "tmpltdef.h"
 
-   bool                           UpdateModifyDuplicate(Environment *,struct expr *,const char *,void *);
    struct expr                   *ModifyParse(Environment *,struct expr *,const char *);
+   struct expr                   *UpdateParse(Environment *,struct expr *,const char *);
    struct expr                   *DuplicateParse(Environment *,struct expr *,const char *);
    void                           DeftemplateFunctions(Environment *);
    void                           ModifyCommand(Environment *,UDFContext *,UDFValue *);
+   void                           UpdateCommand(Environment *,UDFContext *,UDFValue *);
    void                           DuplicateCommand(Environment *,UDFContext *,UDFValue *);
    void                           DeftemplateSlotNamesFunction(Environment *,UDFContext *,UDFValue *);
    void                           DeftemplateSlotNames(Deftemplate *,CLIPSValue *);
@@ -113,7 +119,8 @@
    bool                           DeftemplateSlotFacetExistP(Environment *,Deftemplate *,const char *,const char *);
    void                           DeftemplateSlotFacetValueFunction(Environment *,UDFContext *,UDFValue *);
    bool                           DeftemplateSlotFacetValue(Environment *,Deftemplate *,const char *,const char *,UDFValue *);
-   Fact                          *ReplaceFact(Environment *,Fact *,CLIPSValue *,char *);
+   Fact                          *ReplaceFact(Environment *,Fact *,CLIPSValue *,CLIPSBitMap *,bool);
+   struct patternMatch           *NetworkRetractReplaceFact(Environment *,struct patternMatch *,CLIPSBitMap *,bool);
 
 #endif /* _H_tmpltfun */
 

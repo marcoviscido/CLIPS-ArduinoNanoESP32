@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.41  12/04/22             */
+   /*            CLIPS Version 7.00  01/29/25             */
    /*                                                     */
    /*            MISCELLANEOUS FUNCTIONS MODULE           */
    /*******************************************************/
@@ -112,6 +112,19 @@
 /*            Used gensnprintf in place of gensprintf and.   */
 /*            sprintf.                                       */
 /*                                                           */
+/*      6.42: Gensym* modified to check for both symbols and */
+/*            and instance names when a symbol is generated  */
+/*            so that names automatically generated for      */
+/*            instances are unique.                          */
+/*                                                           */
+/*      7.00: Add $ as an abbreviated function name to call  */
+/*            the create$ function.                          */
+/*                                                           */
+/*            Support for ?var:slot references to facts in   */
+/*            methods and rule actions.                      */
+/*                                                           */
+/*            Support for named facts.                       */
+/*                                                           */
 /*************************************************************/
 
 #include <stdio.h>
@@ -172,8 +185,7 @@ void MiscFunctionDefinitions(
    Retain(theEnv,MiscFunctionData(theEnv)->errorCode.header);
 
 #if ! RUN_TIME
-   // Not needed in ArduinoNanoESP32
-  //  AddUDF(theEnv,"exit","v",0,1,"l",ExitCommand,"ExitCommand",NULL);
+   AddUDF(theEnv,"exit","v",0,1,"l",ExitCommand,"ExitCommand",NULL);
 
    AddUDF(theEnv,"gensym","y",0,0,NULL,GensymFunction,"GensymFunction",NULL);
    AddUDF(theEnv,"gensym*","y",0,0,NULL,GensymStarFunction,"GensymStarFunction",NULL);
@@ -207,6 +219,7 @@ void MiscFunctionDefinitions(
    AddUDF(theEnv,"get-sequence-operator-recognition","b",0,0,NULL,GetSORCommand,"GetSORCommand",NULL);
    AddUDF(theEnv,"get-function-restrictions","s",1,1,"y",GetFunctionRestrictions,"GetFunctionRestrictions",NULL);
    AddUDF(theEnv,"create$","m",0,UNBOUNDED,NULL,CreateFunction,"CreateFunction",NULL);
+   AddUDF(theEnv,"$","m",0,UNBOUNDED,NULL,CreateFunction,"CreateFunction",NULL);
    AddUDF(theEnv,"apropos","v",1,1,"y",AproposCommand,"AproposCommand",NULL);
    AddUDF(theEnv,"get-function-list","m",0,0,NULL,GetFunctionListFunction,"GetFunctionListFunction",NULL);
    AddUDF(theEnv,"funcall","*",1,UNBOUNDED,"*;sy",FuncallFunction,"FuncallFunction",NULL);
@@ -219,38 +232,42 @@ void MiscFunctionDefinitions(
    AddUDF(theEnv,"set-error","v",1,1,NULL,SetErrorFunction,"SetErrorFunction",NULL);
 
    AddUDF(theEnv,"void","v",0,0,NULL,VoidFunction,"VoidFunction",NULL);
+   
+#if DEFTEMPLATE_CONSTRUCT
+   AddUDF(theEnv,"(slot-value)","*",3,3,"y;f",SlotValueFunction,"SlotValueFunction",NULL);
+#endif
+
 #endif
   }
 
-// Not needed in ArduinoNanoESP32
-// /*****************************************************/
-// /* ExitCommand: H/L command for exiting the program. */
-// /*****************************************************/
-// void ExitCommand(
-//   Environment *theEnv,
-//   UDFContext *context,
-//   UDFValue *returnValue)
-//   {
-//    unsigned int argCnt;
-//    int status;
-//    UDFValue theArg;
+/*****************************************************/
+/* ExitCommand: H/L command for exiting the program. */
+/*****************************************************/
+void ExitCommand(
+  Environment *theEnv,
+  UDFContext *context,
+  UDFValue *returnValue)
+  {
+   unsigned int argCnt;
+   int status;
+   UDFValue theArg;
 
-//    argCnt = UDFArgumentCount(context);
+   argCnt = UDFArgumentCount(context);
 
-//    if (argCnt == 0)
-//      { ExitRouter(theEnv,EXIT_SUCCESS); }
-//    else
-//     {
-//      if (! UDFFirstArgument(context,INTEGER_BIT,&theArg))
-//        { ExitRouter(theEnv,EXIT_SUCCESS); }
+   if (argCnt == 0)
+     { ExitRouter(theEnv,EXIT_SUCCESS); }
+   else
+    {
+     if (! UDFFirstArgument(context,INTEGER_BIT,&theArg))
+       { ExitRouter(theEnv,EXIT_SUCCESS); }
 
-//      status = (int) theArg.integerValue->contents;
-//      if (GetEvaluationError(theEnv)) return;
-//      ExitRouter(theEnv,status);
-//     }
+     status = (int) theArg.integerValue->contents;
+     if (GetEvaluationError(theEnv)) return;
+     ExitRouter(theEnv,status);
+    }
 
-//    return;
-//   }
+   return;
+  }
 
 /******************************************************************/
 /* CreateFunction: H/L access routine for the create$ function.   */
@@ -316,7 +333,7 @@ void GensymFunction(
    /* as the postfix.                                */
    /*================================================*/
 
-   gensnprintf(genstring,sizeof(genstring),"gen%lld",MiscFunctionData(theEnv)->GensymNumber);
+   snprintf(genstring,sizeof(genstring),"gen%lld",MiscFunctionData(theEnv)->GensymNumber);
    MiscFunctionData(theEnv)->GensymNumber++;
 
    /*====================*/
@@ -361,10 +378,10 @@ void GensymStar(
 
    do
      {
-      gensnprintf(genstring,sizeof(genstring),"gen%lld",MiscFunctionData(theEnv)->GensymNumber);
+      snprintf(genstring,sizeof(genstring),"gen%lld",MiscFunctionData(theEnv)->GensymNumber);
       MiscFunctionData(theEnv)->GensymNumber++;
      }
-   while (FindSymbolHN(theEnv,genstring,SYMBOL_BIT) != NULL);
+   while (FindSymbolHN(theEnv,genstring,SYMBOL_BIT | INSTANCE_NAME_BIT) != NULL);
 
    /*====================*/
    /* Return the symbol. */
@@ -1355,7 +1372,6 @@ void FuncallFunction(
    /* Verify the correct number of arguments. */
    /*=========================================*/
 
-// TBD Support run time check of arguments
 #if ! RUN_TIME
    if (theReference.type == FCALL)
      {
@@ -1800,4 +1816,110 @@ void VoidFunction(
   UDFValue *returnValue)
   {
    returnValue->voidValue = VoidConstant(theEnv);
+  }
+
+/*****************************************/
+/* SlotValueFunction: H/L access routine */
+/*   for the slot-value function.        */
+/*****************************************/
+void SlotValueFunction(
+  Environment *theEnv,
+  UDFContext *context,
+  UDFValue *returnValue)
+  {
+#if DEFTEMPLATE_CONSTRUCT
+   struct fact *theFact;
+#endif
+   UDFValue factReference;
+   unsigned short position;
+   const char *varSlot;
+   CLIPSLexeme *slotName;
+
+   /*=============================================*/
+   /* Set up the default return value for errors. */
+   /*=============================================*/
+
+   returnValue->value = FalseSymbol(theEnv);
+
+#if DEFTEMPLATE_CONSTRUCT
+
+   /*=========================================*/
+   /* Get the name of the var/slot reference. */
+   /*=========================================*/
+
+   varSlot = GetFirstArgument()->nextArg->nextArg->lexemeValue->contents;
+
+   /*================================*/
+   /* Get the reference to the fact. */
+   /*================================*/
+
+   EvaluateExpression(theEnv,GetFirstArgument(),&factReference);
+   if ((factReference.header->type == SYMBOL_TYPE) &&
+       (factReference.lexemeValue->contents[0] == '@'))
+     {
+      theFact = LookupFact(theEnv,factReference.lexemeValue);
+      if (theFact == NULL)
+        {
+         FactVarSlotErrorMessage4(theEnv,varSlot,factReference.lexemeValue->contents);
+         SetEvaluationError(theEnv,true);
+         return;
+        }
+     }
+   else if (factReference.header->type == FACT_ADDRESS_TYPE)
+     { theFact = factReference.factValue; }
+   else
+     {
+      FactVarSlotErrorMessage3(theEnv,varSlot);
+      SetEvaluationError(theEnv,true);
+      return;
+     }
+
+   if (theFact->garbage)
+     {
+      FactVarSlotErrorMessage1(theEnv,factReference.factValue,varSlot);
+      SetEvaluationError(theEnv,true);
+      return;
+     }
+
+   /*===========================*/
+   /* Get the name of the slot. */
+   /*===========================*/
+
+   slotName = GetFirstArgument()->nextArg->lexemeValue;
+
+   /*=================================================*/
+   /* If the specified slot exists, return the value. */
+   /*=================================================*/
+
+   if (theFact->whichDeftemplate->implied)
+     {
+      if (strcmp(slotName->contents,"implied") == 0)
+        {
+         returnValue->value = theFact->theProposition.contents[0].value;
+         returnValue->begin = 0;
+         returnValue->range = returnValue->multifieldValue->length;
+         return;
+        }
+     }
+   else if (FindSlot(theFact->whichDeftemplate,slotName,&position) != NULL)
+     {
+      returnValue->value = theFact->theProposition.contents[position].value;
+      if (returnValue->header->type == MULTIFIELD_TYPE)
+        {
+         returnValue->begin = 0;
+         returnValue->range = returnValue->multifieldValue->length;
+        }
+      return;
+     }
+
+   /*==========================================*/
+   /* Otherwise the specified slot is invalid. */
+   /*==========================================*/
+
+   PrintErrorID(theEnv,"MISCFUN",7,false);
+   WriteString(theEnv,STDERR,"The variable:slot reference ?");
+   WriteString(theEnv,STDERR,varSlot);
+   WriteString(theEnv,STDERR," can not be resolved because referenced fact does not contain the specified slot\n");
+   SetEvaluationError(theEnv,true);
+#endif
   }

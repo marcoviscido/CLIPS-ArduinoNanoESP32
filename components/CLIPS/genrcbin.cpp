@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.40  02/20/20             */
+   /*            CLIPS Version 7.00  06/22/24             */
    /*                                                     */
    /*                                                     */
    /*******************************************************/
@@ -29,6 +29,10 @@
 /*            Removed use of void pointers for specific      */
 /*            data structures.                               */
 /*                                                           */
+/*      7.00: Construct hashing for quick lookup.            */
+/*                                                           */
+/*            Generic function support for deftemplates.     */
+/*                                                           */
 /*************************************************************/
 
 /* =========================================
@@ -55,6 +59,11 @@
 #else
 #include "prntutil.h"
 #endif
+
+#if DEFTEMPLATE_CONSTRUCT
+#include "tmpltbin.h"
+#endif
+
 #include "router.h"
 
 #include "genrcbin.h"
@@ -67,7 +76,13 @@
 
 #define MethodPointer(i) (((i) == ULONG_MAX) ? NULL : (&DefgenericBinaryData(theEnv)->MethodArray[i]))
 #define RestrictionPointer(i) (((i) == ULONG_MAX) ? NULL : (RESTRICTION *) &DefgenericBinaryData(theEnv)->RestrictionArray[i])
-#define TypePointer(i) (((i) == ULONG_MAX) ? NULL : (void **) &DefgenericBinaryData(theEnv)->TypeArray[i])
+#define TypePointer(i) (((i) == ULONG_MAX) ? NULL : (RESTRICTION_TYPE *) &DefgenericBinaryData(theEnv)->TypeArray[i])
+
+typedef struct bsaveRestrictionType
+  {
+   unsigned short type;
+   unsigned long pointer;
+  } BSAVE_RESTRICTION_TYPE;
 
 typedef struct bsaveRestriction
   {
@@ -182,7 +197,7 @@ static void DeallocateDefgenericBinaryData(
    space = DefgenericBinaryData(theEnv)->RestrictionCount * sizeof(struct restriction);
    if (space != 0) genfree(theEnv,DefgenericBinaryData(theEnv)->RestrictionArray,space);
 
-   space = DefgenericBinaryData(theEnv)->TypeCount * sizeof(void *);
+   space = DefgenericBinaryData(theEnv)->TypeCount * sizeof(RESTRICTION_TYPE);
    if (space != 0) genfree(theEnv,DefgenericBinaryData(theEnv)->TypeArray,space);
 
    space =  DefgenericBinaryData(theEnv)->ModuleCount * sizeof(struct defgenericModule);
@@ -420,11 +435,18 @@ static void BsaveGenerics(
    /* =====================================================================
       Space is: Sum over all structures(sizeof(structure) * structure-cnt))
       ===================================================================== */
+      
+   space = DefgenericBinaryData(theEnv)->ModuleCount * sizeof(BSAVE_DEFGENERIC_MODULE);
+   space = DefgenericBinaryData(theEnv)->GenericCount * sizeof(BSAVE_GENERIC);
+   space = DefgenericBinaryData(theEnv)->MethodCount * sizeof(BSAVE_METHOD);
+   space = DefgenericBinaryData(theEnv)->RestrictionCount * sizeof(BSAVE_RESTRICTION);
+   space = DefgenericBinaryData(theEnv)->TypeCount * sizeof(BSAVE_RESTRICTION_TYPE);
+   
    space = (DefgenericBinaryData(theEnv)->ModuleCount * sizeof(BSAVE_DEFGENERIC_MODULE)) +
            (DefgenericBinaryData(theEnv)->GenericCount * sizeof(BSAVE_GENERIC)) +
            (DefgenericBinaryData(theEnv)->MethodCount * sizeof(BSAVE_METHOD)) +
            (DefgenericBinaryData(theEnv)->RestrictionCount * sizeof(BSAVE_RESTRICTION)) +
-           (DefgenericBinaryData(theEnv)->TypeCount * sizeof(unsigned long));
+           (DefgenericBinaryData(theEnv)->TypeCount * sizeof(BSAVE_RESTRICTION_TYPE));
 
    /* ================================================================
       Write out the total amount of space required:  modules,headers,
@@ -441,7 +463,7 @@ static void BsaveGenerics(
      {
       theModuleItem = (DEFGENERIC_MODULE *)
                       GetModuleItem(theEnv,theModule,FindModuleItem(theEnv,"defgeneric")->moduleIndex);
-      AssignBsaveDefmdlItemHdrVals(&dummy_generic_module.header,
+      AssignBsaveDefmdlItemHdrHMVals(&dummy_generic_module.header,
                                            &theModuleItem->header);
       GenWrite(&dummy_generic_module,
                sizeof(BSAVE_DEFGENERIC_MODULE),fp);
@@ -621,9 +643,9 @@ static void BsaveRestrictionTypes(
   void *userBuffer)
   {
    Defgeneric *gfunc = (Defgeneric *) theDefgeneric;
-   unsigned long dummy_type;
    RESTRICTION *rptr;
    short i,j,k;
+   BSAVE_RESTRICTION_TYPE dummyRestrictionType;
 #if MAC_XCD
 #pragma unused(theEnv)
 #endif
@@ -635,12 +657,26 @@ static void BsaveRestrictionTypes(
          rptr = &gfunc->methods[i].restrictions[j];
          for (k = 0 ; k < rptr->tcnt ; k++)
            {
+            dummyRestrictionType.type = rptr->types[k].type;
+            switch (rptr->types[k].type)
+              {
 #if OBJECT_SYSTEM
-            dummy_type = DefclassIndex(rptr->types[k]);
+               case DEFCLASS_PTR:
+                 dummyRestrictionType.pointer = DefclassIndex(rptr->types[k].theClass);
+                 break;
 #else
-            dummy_type = (unsigned long) ((CLIPSInteger *) rptr->types[k])->contents;
+               case INTEGER_TYPE:
+                 dummyRestrictionType.pointer = (unsigned long) rptr->types[k].theInteger->contents;
+                 break;
 #endif
-            GenWrite(&dummy_type,sizeof(unsigned long),(FILE *) userBuffer);
+#if DEFTEMPLATE_CONSTRUCT
+               case DEFTEMPLATE_PTR:
+                 dummyRestrictionType.pointer = BsaveDeftemplateIndex(rptr->types[k].theTemplate);
+                 break;
+#endif
+              }
+              
+            GenWrite(&dummyRestrictionType,sizeof(BSAVE_RESTRICTION_TYPE),(FILE *) userBuffer);
            }
         }
      }
@@ -703,8 +739,8 @@ static void BloadStorageGenerics(
      return;
    if (DefgenericBinaryData(theEnv)->TypeCount != 0L)
      {
-      space = (sizeof(void *) * DefgenericBinaryData(theEnv)->TypeCount);
-      DefgenericBinaryData(theEnv)->TypeArray = (void * *) genalloc(theEnv,space);
+      space = (sizeof(RESTRICTION_TYPE) * DefgenericBinaryData(theEnv)->TypeCount);
+      DefgenericBinaryData(theEnv)->TypeArray = (RESTRICTION_TYPE *) genalloc(theEnv,space);
      }
   }
 
@@ -738,7 +774,7 @@ static void BloadGenerics(
    BloadandRefresh(theEnv,DefgenericBinaryData(theEnv)->GenericCount,sizeof(BSAVE_GENERIC),UpdateGeneric);
    BloadandRefresh(theEnv,DefgenericBinaryData(theEnv)->MethodCount,sizeof(BSAVE_METHOD),UpdateMethod);
    BloadandRefresh(theEnv,DefgenericBinaryData(theEnv)->RestrictionCount,sizeof(BSAVE_RESTRICTION),UpdateRestriction);
-   BloadandRefresh(theEnv,DefgenericBinaryData(theEnv)->TypeCount,sizeof(long),UpdateType);
+   BloadandRefresh(theEnv,DefgenericBinaryData(theEnv)->TypeCount,sizeof(BSAVE_RESTRICTION_TYPE),UpdateType);
   }
 
 /*********************************************
@@ -752,8 +788,10 @@ static void UpdateGenericModule(
    BSAVE_DEFGENERIC_MODULE *bdptr;
 
    bdptr = (BSAVE_DEFGENERIC_MODULE *) buf;
-   UpdateDefmoduleItemHeader(theEnv,&bdptr->header,&DefgenericBinaryData(theEnv)->ModuleArray[obji].header,
-                             sizeof(Defgeneric),DefgenericBinaryData(theEnv)->DefgenericArray);
+   UpdateDefmoduleItemHeaderHM(theEnv,&bdptr->header,&DefgenericBinaryData(theEnv)->ModuleArray[obji].header,
+                               sizeof(Defgeneric),DefgenericBinaryData(theEnv)->DefgenericArray);
+                               
+   AssignHashMapSize(theEnv,&DefgenericBinaryData(theEnv)->ModuleArray[obji].header,bdptr->header.itemCount);
   }
 
 static void UpdateGeneric(
@@ -777,6 +815,9 @@ static void UpdateGeneric(
    DefgenericBinaryData(theEnv)->DefgenericArray[obji].methods = MethodPointer(bgp->methods);
    DefgenericBinaryData(theEnv)->DefgenericArray[obji].mcnt = bgp->mcnt;
    DefgenericBinaryData(theEnv)->DefgenericArray[obji].new_index = 0;
+
+   AddConstructToHashMap(theEnv,&DefgenericBinaryData(theEnv)->DefgenericArray[obji].header,
+                         DefgenericBinaryData(theEnv)->DefgenericArray[obji].header.whichModule);
   }
 
 static void UpdateMethod(
@@ -813,6 +854,7 @@ static void UpdateRestriction(
    BSAVE_RESTRICTION *brp;
 
    brp = (BSAVE_RESTRICTION *) buf;
+
    DefgenericBinaryData(theEnv)->RestrictionArray[obji].tcnt = brp->tcnt;
    DefgenericBinaryData(theEnv)->RestrictionArray[obji].types = TypePointer(brp->types);
    DefgenericBinaryData(theEnv)->RestrictionArray[obji].query = ExpressionPointer(brp->query);
@@ -823,20 +865,40 @@ static void UpdateType(
   void *buf,
   unsigned long obji)
   {
-#if OBJECT_SYSTEM
-   DefgenericBinaryData(theEnv)->TypeArray[obji] = DefclassPointer(* (unsigned long *) buf);
-#else
-   if ((* (long *) buf) > INSTANCE_TYPE_CODE)
+   BSAVE_RESTRICTION_TYPE *brtp;
+
+   brtp = (BSAVE_RESTRICTION_TYPE *) buf;
+   
+   DefgenericBinaryData(theEnv)->TypeArray[obji].type = brtp->type;
+   
+   switch (brtp->type)
      {
-      PrintWarningID(theEnv,"GENRCBIN",1,false);
-      WriteString(theEnv,STDWRN,"COOL not installed!  User-defined class\n");
-      WriteString(theEnv,STDWRN,"  in method restriction substituted with OBJECT.\n");
-      DefgenericBinaryData(theEnv)->TypeArray[obji] = CreateInteger(theEnv,OBJECT_TYPE_CODE);
-     }
-   else
-     DefgenericBinaryData(theEnv)->TypeArray[obji] = CreateInteger(theEnv,* (long *) buf);
-   IncrementIntegerCount((CLIPSInteger *) DefgenericBinaryData(theEnv)->TypeArray[obji]);
+#if OBJECT_SYSTEM
+      case DEFCLASS_PTR:
+        DefgenericBinaryData(theEnv)->TypeArray[obji].theClass = DefclassPointer(brtp->pointer);
+        break;
+#else
+      case INTEGER_TYPE:
+        if (brtp->pointer > INSTANCE_TYPE_CODE)
+          {
+           PrintWarningID(theEnv,"GENRCBIN",1,false);
+           WriteString(theEnv,STDWRN,"COOL not installed!  User-defined class\n");
+           WriteString(theEnv,STDWRN,"  in method restriction substituted with OBJECT.\n");
+           DefgenericBinaryData(theEnv)->TypeArray[obji].theInteger = CreateInteger(theEnv,OBJECT_TYPE_CODE);
+          }
+        else
+          { DefgenericBinaryData(theEnv)->TypeArray[obji].theInteger = CreateInteger(theEnv,* (long *) buf);
+          
+          }
+        IncrementIntegerCount(DefgenericBinaryData(theEnv)->TypeArray[obji].theInteger);
+        break;
 #endif
+#if DEFTEMPLATE_CONSTRUCT
+      case DEFTEMPLATE_PTR:
+        DefgenericBinaryData(theEnv)->TypeArray[obji].theTemplate = DeftemplatePointer(brtp->pointer);
+        break;
+#endif
+     }
   }
 
 /***************************************************************
@@ -858,6 +920,10 @@ static void ClearBloadGenerics(
    space = (sizeof(DEFGENERIC_MODULE) * DefgenericBinaryData(theEnv)->ModuleCount);
    if (space == 0L)
      return;
+     
+   for (i = 0; i < DefgenericBinaryData(theEnv)->ModuleCount; i++)
+     { ClearDefmoduleHashMap(theEnv,&DefgenericBinaryData(theEnv)->ModuleArray[i].header); }
+
    genfree(theEnv,DefgenericBinaryData(theEnv)->ModuleArray,space);
    DefgenericBinaryData(theEnv)->ModuleArray = NULL;
    DefgenericBinaryData(theEnv)->ModuleCount = 0L;
@@ -888,9 +954,9 @@ static void ClearBloadGenerics(
 
 #if ! OBJECT_SYSTEM
    for (i = 0 ; i < DefgenericBinaryData(theEnv)->TypeCount ; i++)
-     ReleaseInteger(theEnv,(CLIPSInteger *) DefgenericBinaryData(theEnv)->TypeArray[i]);
+     ReleaseInteger(theEnv,(CLIPSInteger *) DefgenericBinaryData(theEnv)->TypeArray[i].theInteger);
 #endif
-   space = (sizeof(void *) * DefgenericBinaryData(theEnv)->TypeCount);
+   space = (sizeof(RESTRICTION_TYPE) * DefgenericBinaryData(theEnv)->TypeCount);
    if (space == 0L)
      return;
    genfree(theEnv,DefgenericBinaryData(theEnv)->TypeArray,space);
