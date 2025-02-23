@@ -137,8 +137,9 @@ void MqttConnectFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
     mqtt_config.credentials.authentication = {};
     mqtt_config.credentials.authentication.password = mqtt_password;
 
-    if (mqtt_client_handle == nullptr)
-    {
+    // TODO: DirectGetSlot(theInstance, "connected", ...);
+    // if (mqtt_client_handle == nullptr)
+    // {
         mqtt_client_handle = esp_mqtt_client_init(&mqtt_config);
 
         if (mqtt_client_handle == NULL)
@@ -150,11 +151,11 @@ void MqttConnectFunction(Environment *theEnv, UDFContext *context, UDFValue *ret
         ESP_ERROR_CHECK(esp_mqtt_client_register_event(mqtt_client_handle, MQTT_EVENT_CONNECTED, mqtt_on_connected_cb, theInstance));
         ESP_ERROR_CHECK(esp_mqtt_client_register_event(mqtt_client_handle, MQTT_EVENT_DATA, mqtt_on_data_cb, theInstance));
         ESP_ERROR_CHECK(esp_mqtt_client_start(mqtt_client_handle));
-    }
-    else
-    {
-        ESP_LOGW("MqttConnectFunction", "mqtt already connected");
-    }
+    // }
+    // else
+    // {
+    //     ESP_LOGW("MqttConnectFunction", "mqtt already connected");
+    // }
 
     return;
 }
