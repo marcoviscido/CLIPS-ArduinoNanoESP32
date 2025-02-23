@@ -1,6 +1,6 @@
 ![WIP](https://img.shields.io/badge/ESP_IDF-V5.3.2-blue)
 ![WIP](https://img.shields.io/badge/target-ESP32_S3-blue)
-![WIP](https://img.shields.io/badge/CLIPS-V6.4.1-blue)
+![WIP](https://img.shields.io/badge/CLIPS-V6.4.2-blue)
 ![WIP](https://img.shields.io/badge/status-WIP-orange)
 
 # CLIPS-ArduinoNanoESP32

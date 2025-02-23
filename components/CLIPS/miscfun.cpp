@@ -1,7 +1,7 @@
    /*******************************************************/
    /*      "C" Language Integrated Production System      */
    /*                                                     */
-   /*            CLIPS Version 6.41  12/04/22             */
+   /*            CLIPS Version 6.42  07/05/24             */
    /*                                                     */
    /*            MISCELLANEOUS FUNCTIONS MODULE           */
    /*******************************************************/
@@ -112,6 +112,11 @@
 /*            Used gensnprintf in place of gensprintf and.   */
 /*            sprintf.                                       */
 /*                                                           */
+/*      6.42: Gensym* modified to check for both symbols and */
+/*            and instance names when a symbol is generated  */
+/*            so that names automatically generated for      */
+/*            instances are unique.                          */
+/*                                                           */
 /*************************************************************/
 
 #include <stdio.h>
@@ -172,7 +177,7 @@ void MiscFunctionDefinitions(
    Retain(theEnv,MiscFunctionData(theEnv)->errorCode.header);
 
 #if ! RUN_TIME
-   // Not needed in ArduinoNanoESP32
+  // Not needed in ArduinoNanoESP32
   //  AddUDF(theEnv,"exit","v",0,1,"l",ExitCommand,"ExitCommand",NULL);
 
    AddUDF(theEnv,"gensym","y",0,0,NULL,GensymFunction,"GensymFunction",NULL);
@@ -364,7 +369,7 @@ void GensymStar(
       gensnprintf(genstring,sizeof(genstring),"gen%lld",MiscFunctionData(theEnv)->GensymNumber);
       MiscFunctionData(theEnv)->GensymNumber++;
      }
-   while (FindSymbolHN(theEnv,genstring,SYMBOL_BIT) != NULL);
+   while (FindSymbolHN(theEnv,genstring,SYMBOL_BIT | INSTANCE_NAME_BIT) != NULL);
 
    /*====================*/
    /* Return the symbol. */
